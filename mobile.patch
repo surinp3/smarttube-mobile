@@ -411,20 +411,21 @@ index 000000000..c1b435334
 +    private static LinearLayout.LayoutParams wrapWidth() { return new LinearLayout.LayoutParams(-1, -2); }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-index b3dddad29..8db04e4a1 100644
+index b3dddad29..b5c4f32ba 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-@@ -21,7 +21,8 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
+@@ -21,7 +21,9 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
  import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
  import com.liskovsoft.smartyoutubetv2.common.prefs.NetworkData;
  import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 -import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 +import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 +import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
++import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
  import com.liskovsoft.smartyoutubetv2.tv.ui.adddevice.AddDeviceActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.channel.ChannelActivity;
-@@ -31,7 +32,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.dialogs.AppDialogActivityOpaque;
+@@ -31,7 +33,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.dialogs.AppDialogActivityOpaque;
  import com.liskovsoft.smartyoutubetv2.tv.ui.playback.PlaybackActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.search.tags.SearchTagsActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.signin.SignInActivity;
@@ -435,7 +436,29 @@ index b3dddad29..8db04e4a1 100644
  
  import org.conscrypt.Conscrypt;
  
-@@ -73,7 +76,10 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+@@ -53,10 +57,17 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+     }
+ 
+     @Override
+-    public void onCreate() {
+-        super.onCreate();
+-
+-        // ByeByeDPI fix
++    public void onCreate() {
++        super.onCreate();
++
++        // Modern phone carriers commonly use IPv6-only networks with NAT64.
++        // The TV default forces an IPv4-first resolver and can make every host
++        // fail with UnknownHostException. Let Android handle DNS on mobile.
++        if (BuildConfig.FLAVOR.equals("stmobile")) {
++            GlobalPreferences.instance(this).setPreferredDnsType(GlobalPreferences.DNS_TYPE_SYSTEM);
++        }
++
++        // ByeByeDPI fix
+         // https://android-review.googlesource.com/c/platform/external/conscrypt/+/89408/
+         // NOTE: Android 10+ (API 29+) uses system Conscrypt TLS; custom Security providers are unnecessary
+         // NOTE: May cause 'Unexpected playback error null'
+@@ -73,7 +84,10 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
              // UnsatisfiedLinkError
          }
  
@@ -447,7 +470,7 @@ index b3dddad29..8db04e4a1 100644
              try {
                  Security.insertProviderAt(conscryptProvider, 1);
              } catch (Throwable e) {
-@@ -98,17 +104,20 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+@@ -98,17 +112,20 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
              dialogClazz = AppDialogActivity.class;
          }
  
