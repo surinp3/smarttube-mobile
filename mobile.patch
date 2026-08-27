@@ -50,9 +50,18 @@ index 8d521d439..4e518cd71 100644
  }
  
 diff --git a/smarttubetv/src/main/AndroidManifest.xml b/smarttubetv/src/main/AndroidManifest.xml
-index e40af8cf7..d5442faec 100644
+index e40af8cf7..149cf6856 100644
 --- a/smarttubetv/src/main/AndroidManifest.xml
 +++ b/smarttubetv/src/main/AndroidManifest.xml
+@@ -40,7 +40,7 @@
+         android:required="false" />
+     <uses-feature
+         android:name="android.software.leanback"
+-        android:required="true" />
++        android:required="false" />
+ 
+     <!-- android:usesCleartextTraffic - allow HTTP traffic -->
+     <!-- Alt cleartext options: https://stackoverflow.com/questions/45940861/android-8-cleartext-http-traffic-not-permitted -->
 @@ -157,6 +157,13 @@
              android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|layoutDirection"
              android:screenOrientation="unspecified"/>
@@ -402,7 +411,7 @@ index 000000000..c1b435334
 +    private static LinearLayout.LayoutParams wrapWidth() { return new LinearLayout.LayoutParams(-1, -2); }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-index b3dddad29..dd16d826c 100644
+index b3dddad29..8db04e4a1 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
 @@ -21,7 +21,8 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
@@ -426,7 +435,19 @@ index b3dddad29..dd16d826c 100644
  
  import org.conscrypt.Conscrypt;
  
-@@ -98,17 +101,20 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+@@ -73,7 +76,10 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+             // UnsatisfiedLinkError
+         }
+ 
+-        if (conscryptProvider != null && NetworkData.instance(this).isConscryptEnabled()) {
++        // Phones on modern Android already provide a current TLS stack. SmartTube's
++        // custom TV provider can interfere with DNS/TLS on Android 15/16 devices.
++        boolean isMobileBuild = BuildConfig.FLAVOR.equals("stmobile");
++        if (!isMobileBuild && conscryptProvider != null && NetworkData.instance(this).isConscryptEnabled()) {
+             try {
+                 Security.insertProviderAt(conscryptProvider, 1);
+             } catch (Throwable e) {
+@@ -98,17 +104,20 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
              dialogClazz = AppDialogActivity.class;
          }
  
