@@ -32,10 +32,10 @@ index 000000000..aaa7440c8
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8d521d439..ef020c3cf 100644
+index 8d521d439..4e518cd71 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
-@@ -172,6 +172,12 @@ android {
+@@ -172,6 +172,13 @@ android {
              minSdkVersion 21
              targetSdkVersion project.properties.compileSdkVersion
          }
@@ -44,6 +44,7 @@ index 8d521d439..ef020c3cf 100644
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
 +            versionNameSuffix "-mobile"
++            matchingFallbacks = ['ststable']
 +        }
      }
  }
