@@ -32,10 +32,10 @@ index 000000000..aaa7440c8
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8d521d439..4e518cd71 100644
+index 8d521d439..027c96e99 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
-@@ -172,6 +172,13 @@ android {
+@@ -172,6 +172,14 @@ android {
              minSdkVersion 21
              targetSdkVersion project.properties.compileSdkVersion
          }
@@ -43,7 +43,8 @@ index 8d521d439..4e518cd71 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionNameSuffix "-mobile"
++            versionCode 2423
++            versionNameSuffix "-mobile.3"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -85,10 +86,10 @@ index e40af8cf7..149cf6856 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 000000000..c1b435334
+index 000000000..a6b1c3d44
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,321 @@
+@@ -0,0 +1,416 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.content.res.Configuration;
@@ -117,6 +118,7 @@ index 000000000..c1b435334
 +import com.bumptech.glide.Glide;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.data.BrowseSection;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsGroup;
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsItem;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.errors.ErrorFragmentData;
@@ -145,6 +147,7 @@ index 000000000..c1b435334
 +    private BrowsePresenter presenter;
 +    private LinearLayout sectionBar;
 +    private RecyclerView content;
++    private LinearLayout settingsList;
 +    private GridLayoutManager layoutManager;
 +    private VideoAdapter adapter;
 +    private ProgressBar progress;
@@ -194,6 +197,8 @@ index 000000000..c1b435334
 +        toolbar.setPadding(dp(16), dp(8), dp(8), dp(6));
 +        title = text("SmartTube", 22, PRIMARY);
 +        title.setTypeface(Typeface.DEFAULT_BOLD);
++        title.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_media_play, 0, 0, 0);
++        title.setCompoundDrawablePadding(dp(8));
 +        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(52), 1));
 +
 +        ImageButton search = new ImageButton(this);
@@ -221,6 +226,9 @@ index 000000000..c1b435334
 +        scroller.addView(sectionBar, wrap());
 +        page.addView(scroller, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 +
++        FrameLayout body = new FrameLayout(this);
++        page.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
++
 +        content = new RecyclerView(this);
 +        content.setClipToPadding(false);
 +        content.setPadding(dp(10), dp(4), dp(10), dp(90));
@@ -228,7 +236,28 @@ index 000000000..c1b435334
 +        content.setLayoutManager(layoutManager);
 +        adapter = new VideoAdapter();
 +        content.setAdapter(adapter);
-+        page.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
++        body.addView(content, match());
++
++        android.widget.ScrollView settingsScroll = new android.widget.ScrollView(this);
++        settingsScroll.setFillViewport(true);
++        settingsList = new LinearLayout(this);
++        settingsList.setOrientation(LinearLayout.VERTICAL);
++        settingsList.setPadding(dp(12), dp(8), dp(12), dp(96));
++        settingsScroll.addView(settingsList, wrapWidth());
++        settingsScroll.setVisibility(View.GONE);
++        body.addView(settingsScroll, match());
++
++        LinearLayout bottomBar = new LinearLayout(this);
++        bottomBar.setGravity(Gravity.CENTER);
++        bottomBar.setBackgroundColor(Color.rgb(20, 20, 20));
++        addBottomAction(bottomBar, "Home", android.R.drawable.ic_menu_view, () -> selectNamedSection("home"));
++        addBottomAction(bottomBar, "Search", android.R.drawable.ic_menu_search,
++                () -> SearchPresenter.instance(this).startSearch(null));
++        addBottomAction(bottomBar, "Subscriptions", android.R.drawable.ic_menu_agenda,
++                () -> selectNamedSection("subscription"));
++        addBottomAction(bottomBar, "Settings", android.R.drawable.ic_menu_preferences,
++                () -> selectSettingsSection());
++        page.addView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
 +
 +        progress = new ProgressBar(this);
 +        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER);
@@ -291,6 +320,26 @@ index 000000000..c1b435334
 +        }
 +    }
 +
++    private void selectNamedSection(String name) {
++        for (BrowseSection section : sections.values()) {
++            if (section.getTitle() != null && section.getTitle().toLowerCase().contains(name)) {
++                selectSectionById(section.getId());
++                return;
++            }
++        }
++        if (!sections.isEmpty()) selectSection(0, true);
++    }
++
++    private void selectSettingsSection() {
++        for (BrowseSection section : sections.values()) {
++            if (section.getType() == BrowseSection.TYPE_SETTINGS_GRID) {
++                selectSectionById(section.getId());
++                return;
++            }
++        }
++        Toast.makeText(this, "Settings are not available yet", Toast.LENGTH_SHORT).show();
++    }
++
 +    @Override
 +    public void selectSection(int index, boolean focusOnContent) {
 +        if (index < 0 || index >= sections.size()) return;
@@ -298,6 +347,10 @@ index 000000000..c1b435334
 +        selectedSection = section.getId();
 +        title.setText(section.getTitle());
 +        adapter.clear();
++        content.setVisibility(section.getType() == BrowseSection.TYPE_SETTINGS_GRID ? View.GONE : View.VISIBLE);
++        ((View) settingsList.getParent()).setVisibility(
++                section.getType() == BrowseSection.TYPE_SETTINGS_GRID ? View.VISIBLE : View.GONE);
++        if (section.getType() != BrowseSection.TYPE_SETTINGS_GRID) settingsList.removeAllViews();
 +        rebuildSections();
 +        presenter.onSectionFocused(section.getId());
 +        if (focusOnContent) content.requestFocus();
@@ -310,7 +363,38 @@ index 000000000..c1b435334
 +
 +    @Override
 +    public void updateSection(SettingsGroup group) {
-+        // Settings continue to use SmartTube's existing dialog UI in milestone one.
++        runOnUiThread(() -> {
++            settingsList.removeAllViews();
++            content.setVisibility(View.GONE);
++            ((View) settingsList.getParent()).setVisibility(View.VISIBLE);
++            if (group == null || group.getItems() == null || group.getItems().isEmpty()) {
++                TextView empty = text("No settings available", 16, SECONDARY);
++                settingsList.addView(empty, wrapWidth());
++                return;
++            }
++            for (SettingsItem item : group.getItems()) {
++                LinearLayout row = new LinearLayout(this);
++                row.setGravity(Gravity.CENTER_VERTICAL);
++                row.setPadding(dp(18), dp(12), dp(12), dp(12));
++                row.setBackgroundColor(SURFACE);
++
++                ImageView icon = new ImageView(this);
++                icon.setImageResource(item.imageResId > 0 ? item.imageResId : android.R.drawable.ic_menu_preferences);
++                icon.setColorFilter(PRIMARY);
++                row.addView(icon, new LinearLayout.LayoutParams(dp(34), dp(34)));
++
++                TextView label = text(item.title, 16, PRIMARY);
++                label.setPadding(dp(18), 0, dp(8), 0);
++                row.addView(label, new LinearLayout.LayoutParams(0, dp(58), 1));
++                TextView arrow = text("›", 28, SECONDARY);
++                row.addView(arrow, new LinearLayout.LayoutParams(dp(36), dp(58)));
++                row.setOnClickListener(v -> { if (item.onClick != null) item.onClick.run(); });
++
++                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(64));
++                params.setMargins(0, 0, 0, dp(2));
++                settingsList.addView(row, params);
++            }
++        });
 +    }
 +
 +    @Override
@@ -404,6 +488,18 @@ index 000000000..c1b435334
 +        view.setText(value); view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp); view.setTextColor(color);
 +        view.setPadding(dp(6), dp(6), dp(6), dp(2));
 +        return view;
++    }
++    private void addBottomAction(LinearLayout bar, String label, int iconRes, Runnable action) {
++        Button button = new Button(this);
++        button.setText(label);
++        button.setTextSize(11);
++        button.setTextColor(PRIMARY);
++        button.setAllCaps(false);
++        button.setCompoundDrawablesWithIntrinsicBounds(0, iconRes, 0, 0);
++        button.setCompoundDrawablePadding(dp(2));
++        button.setBackgroundColor(Color.TRANSPARENT);
++        button.setOnClickListener(v -> action.run());
++        bar.addView(button, new LinearLayout.LayoutParams(0, dp(64), 1));
 +    }
 +    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 +    private static ViewGroup.LayoutParams match() { return new ViewGroup.LayoutParams(-1, -1); }
@@ -502,3 +598,13 @@ index b3dddad29..b5c4f32ba 100644
      }
  
      private void setupGlobalExceptionHandler() {
+diff --git a/smarttubetv/src/stmobile/res/values/strings.xml b/smarttubetv/src/stmobile/res/values/strings.xml
+new file mode 100644
+index 000000000..5ff17f56b
+--- /dev/null
++++ b/smarttubetv/src/stmobile/res/values/strings.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="app_name">SmartTube Mobile v3</string>
++</resources>
