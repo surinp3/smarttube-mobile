@@ -32,7 +32,7 @@ index 000000000..aaa7440c8
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8d521d439..027c96e99 100644
+index 8d521d439..37d655612 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -172,6 +172,14 @@ android {
@@ -43,8 +43,8 @@ index 8d521d439..027c96e99 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2423
-+            versionNameSuffix "-mobile.3"
++            versionCode 2424
++            versionNameSuffix "-mobile.4"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -86,16 +86,18 @@ index e40af8cf7..149cf6856 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 000000000..a6b1c3d44
+index 000000000..f8bddfc83
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,416 @@
+@@ -0,0 +1,492 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.content.res.Configuration;
 +import android.graphics.Color;
 +import android.graphics.Typeface;
 +import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
 +import android.text.TextUtils;
 +import android.util.TypedValue;
 +import android.view.Gravity;
@@ -103,7 +105,6 @@ index 000000000..a6b1c3d44
 +import android.view.ViewGroup;
 +import android.widget.Button;
 +import android.widget.FrameLayout;
-+import android.widget.HorizontalScrollView;
 +import android.widget.ImageButton;
 +import android.widget.ImageView;
 +import android.widget.LinearLayout;
@@ -128,6 +129,9 @@ index 000000000..a6b1c3d44
 +import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
 +import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 +import com.liskovsoft.smartyoutubetv2.tv.R;
++import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
++import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
++import io.reactivex.disposables.CompositeDisposable;
 +
 +import java.util.ArrayList;
 +import java.util.LinkedHashMap;
@@ -153,6 +157,21 @@ index 000000000..a6b1c3d44
 +    private ProgressBar progress;
 +    private TextView title;
 +    private int selectedSection = -1;
++    private final CompositeDisposable curatedActions = new CompositeDisposable();
++    private boolean curatedMode;
++    private static final String[] LOCAL_CHANNELS = {
++            "M Bjoernstroem", "Alec Steele", "LegitStreetCars", "FarmCraft101", "M539 Restorations",
++            "Cutting Edge Engineering Australia", "Pask Makes", "WhistlinDiesel", "Inheritance Machining",
++            "Watch Wes Work", "Joey Does Tech", "Marius Hornberger", "GreatScott", "Rich Rebuilds",
++            "Fooster", "Waldos World", "Triggernometry", "Uri Tuchman", "Warren Smith Secret Scholars",
++            "Max Maker", "Mat Armstrong MK2", "Fabulous Pattaya", "Fresh Spawns", "Integrity Legal Thailand",
++            "YMH Clips", "Craftsman Chris", "PowerfulJRE", "Flick Connection", "MrBallen",
++            "Tucker Carlson Network", "DUST", "PBD Podcast", "Asmongold Clips", "JRE Clips",
++            "DIY Solar Power Will Prowse", "Mighty Car Mods", "Shawn Ryan Show", "Mat Armstrong",
++            "Call Me Chato", "Vice Grip Garage", "Chase Hughes", "Chris Williamson", "Henrik Jonsson",
++            "BradenBuildz", "mrnigelng", "Valuetainment Short Clips", "RUDAN BROTHERS", "IGP",
++            "M539 Plus", "carwow", "Real Civil Engineer", "AvE"
++    };
 +
 +    @Override
 +    protected void onCreate(Bundle state) {
@@ -161,6 +180,7 @@ index 000000000..a6b1c3d44
 +        presenter = BrowsePresenter.instance(this);
 +        presenter.setView(this);
 +        presenter.onViewInitialized();
++        new Handler(Looper.getMainLooper()).postDelayed(() -> loadCuratedFeed(false), 500);
 +    }
 +
 +    @Override
@@ -176,6 +196,12 @@ index 000000000..a6b1c3d44
 +    protected void onPause() {
 +        if (presenter != null) presenter.onViewPaused();
 +        super.onPause();
++    }
++
++    @Override
++    protected void onDestroy() {
++        curatedActions.clear();
++        super.onDestroy();
 +    }
 +
 +    @Override
@@ -210,21 +236,16 @@ index 000000000..a6b1c3d44
 +        toolbar.addView(search, new LinearLayout.LayoutParams(dp(52), dp(52)));
 +
 +        ImageButton account = new ImageButton(this);
-+        account.setImageResource(R.drawable.ic_user);
++        account.setImageResource(android.R.drawable.ic_popup_sync);
 +        account.setColorFilter(PRIMARY);
 +        account.setBackgroundColor(Color.TRANSPARENT);
-+        account.setContentDescription("Account and sign in");
-+        account.setOnClickListener(v -> AccountSettingsPresenter.instance(this).show());
++        account.setContentDescription("Refresh feed");
++        account.setOnClickListener(v -> loadCuratedFeed(false));
 +        toolbar.addView(account, new LinearLayout.LayoutParams(dp(52), dp(52)));
 +        page.addView(toolbar, wrapWidth());
 +
-+        HorizontalScrollView scroller = new HorizontalScrollView(this);
-+        scroller.setHorizontalScrollBarEnabled(false);
 +        sectionBar = new LinearLayout(this);
-+        sectionBar.setOrientation(LinearLayout.HORIZONTAL);
-+        sectionBar.setPadding(dp(10), 0, dp(10), dp(8));
-+        scroller.addView(sectionBar, wrap());
-+        page.addView(scroller, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
++        sectionBar.setVisibility(View.GONE); // Mobile navigation lives in the fixed bottom bar.
 +
 +        FrameLayout body = new FrameLayout(this);
 +        page.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -250,11 +271,11 @@ index 000000000..a6b1c3d44
 +        LinearLayout bottomBar = new LinearLayout(this);
 +        bottomBar.setGravity(Gravity.CENTER);
 +        bottomBar.setBackgroundColor(Color.rgb(20, 20, 20));
-+        addBottomAction(bottomBar, "Home", android.R.drawable.ic_menu_view, () -> selectNamedSection("home"));
++        addBottomAction(bottomBar, "Home", android.R.drawable.ic_menu_view, () -> loadCuratedFeed(false));
 +        addBottomAction(bottomBar, "Search", android.R.drawable.ic_menu_search,
 +                () -> SearchPresenter.instance(this).startSearch(null));
 +        addBottomAction(bottomBar, "Subscriptions", android.R.drawable.ic_menu_agenda,
-+                () -> selectNamedSection("subscription"));
++                () -> loadCuratedFeed(true));
 +        addBottomAction(bottomBar, "Settings", android.R.drawable.ic_menu_preferences,
 +                () -> selectSettingsSection());
 +        page.addView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
@@ -289,6 +310,7 @@ index 000000000..a6b1c3d44
 +    }
 +
 +    private void rebuildSections() {
++        if (sectionBar.getParent() == null) return;
 +        runOnUiThread(() -> {
 +            sectionBar.removeAllViews();
 +            sectionButtons.clear();
@@ -307,6 +329,47 @@ index 000000000..a6b1c3d44
 +                sectionButtons.add(button);
 +            }
 +        });
++    }
++
++    private void loadCuratedFeed(boolean subscriptionsOnly) {
++        curatedMode = true;
++        curatedActions.clear();
++        adapter.clear();
++        settingsList.removeAllViews();
++        ((View) settingsList.getParent()).setVisibility(View.GONE);
++        content.setVisibility(View.VISIBLE);
++        title.setText(subscriptionsOnly ? "Subscriptions" : "Home");
++        progress.setVisibility(View.VISIBLE);
++
++        String[] queries = subscriptionsOnly ? new String[] {
++                "Mat Armstrong Vice Grip Garage M539 Restorations Rich Rebuilds",
++                "Alec Steele AvE Cutting Edge Engineering Pask Makes Inheritance Machining",
++                "PowerfulJRE Chris Williamson Shawn Ryan Show Triggernometry",
++                "Mighty Car Mods carwow LegitStreetCars WhistlinDiesel",
++                "MrBallen DUST Fooster IGP Real Civil Engineer",
++                "DIY Solar Power Will Prowse GreatScott Marius Hornberger"
++        } : new String[] {
++                "car restoration workshop fabrication latest",
++                "machining engineering maker projects latest",
++                "Thailand Pattaya legal news expat latest",
++                "solar power DIY technology latest",
++                "automotive rebuild review latest",
++                "podcast current affairs long form latest"
++        };
++
++        for (String query : queries) {
++            curatedActions.add(YouTubeServiceManager.instance().getContentService().getSearchObserve(query)
++                    .subscribe(groups -> {
++                        for (MediaGroup mediaGroup : groups) {
++                            VideoGroup videoGroup = VideoGroup.from(mediaGroup);
++                            if (videoGroup != null && videoGroup.getVideos() != null && !videoGroup.getVideos().isEmpty()) {
++                                runOnUiThread(() -> adapter.appendUnique(videoGroup, 8));
++                                break;
++                            }
++                        }
++                        runOnUiThread(() -> progress.setVisibility(View.GONE));
++                    }, error -> runOnUiThread(() -> progress.setVisibility(View.GONE))));
++        }
 +    }
 +
 +    private void selectSectionById(int id) {
@@ -344,6 +407,7 @@ index 000000000..a6b1c3d44
 +    public void selectSection(int index, boolean focusOnContent) {
 +        if (index < 0 || index >= sections.size()) return;
 +        BrowseSection section = new ArrayList<>(sections.values()).get(index);
++        curatedMode = false;
 +        selectedSection = section.getId();
 +        title.setText(section.getTitle());
 +        adapter.clear();
@@ -358,7 +422,7 @@ index 000000000..a6b1c3d44
 +
 +    @Override
 +    public void updateSection(VideoGroup group) {
-+        runOnUiThread(() -> adapter.apply(group));
++        if (!curatedMode) runOnUiThread(() -> adapter.apply(group));
 +    }
 +
 +    @Override
@@ -441,6 +505,18 @@ index 000000000..a6b1c3d44
 +        }
 +
 +        void clear() { videos.clear(); notifyDataSetChanged(); }
++        void appendUnique(VideoGroup group, int limit) {
++            int added = 0;
++            for (Video video : group.getVideos()) {
++                boolean exists = false;
++                for (Video current : videos) {
++                    if (video.videoId != null && video.videoId.equals(current.videoId)) { exists = true; break; }
++                }
++                if (!exists) { videos.add(video); added++; }
++                if (added >= limit) break;
++            }
++            notifyDataSetChanged();
++        }
 +        int indexOf(Video item) { return videos.indexOf(item); }
 +
 +        @NonNull @Override
@@ -600,11 +676,11 @@ index b3dddad29..b5c4f32ba 100644
      private void setupGlobalExceptionHandler() {
 diff --git a/smarttubetv/src/stmobile/res/values/strings.xml b/smarttubetv/src/stmobile/res/values/strings.xml
 new file mode 100644
-index 000000000..5ff17f56b
+index 000000000..a7c8416ac
 --- /dev/null
 +++ b/smarttubetv/src/stmobile/res/values/strings.xml
 @@ -0,0 +1,4 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
-+    <string name="app_name">SmartTube Mobile v3</string>
++    <string name="app_name">SmartTube Mobile v4</string>
 +</resources>
