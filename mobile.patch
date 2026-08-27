@@ -32,7 +32,7 @@ index 000000000..aaa7440c8
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8d521d439..37d655612 100644
+index 8d521d439..84bfa1d0a 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -172,6 +172,14 @@ android {
@@ -43,8 +43,8 @@ index 8d521d439..37d655612 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2424
-+            versionNameSuffix "-mobile.4"
++            versionCode 2425
++            versionNameSuffix "-mobile.5"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -86,10 +86,10 @@ index e40af8cf7..149cf6856 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 000000000..f8bddfc83
+index 000000000..eb3180b63
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,492 @@
+@@ -0,0 +1,533 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.content.res.Configuration;
@@ -130,6 +130,7 @@ index 000000000..f8bddfc83
 +import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 +import com.liskovsoft.smartyoutubetv2.tv.R;
 +import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
++import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions;
 +import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 +import io.reactivex.disposables.CompositeDisposable;
 +
@@ -137,6 +138,8 @@ index 000000000..f8bddfc83
 +import java.util.LinkedHashMap;
 +import java.util.List;
 +import java.util.Map;
++import java.util.Collections;
++import java.util.Comparator;
 +
 +/** Touch-first phone shell backed by SmartTube's existing BrowsePresenter. */
 +public class MobileBrowseActivity extends MotherActivity implements BrowseView {
@@ -341,35 +344,42 @@ index 000000000..f8bddfc83
 +        title.setText(subscriptionsOnly ? "Subscriptions" : "Home");
 +        progress.setVisibility(View.VISIBLE);
 +
-+        String[] queries = subscriptionsOnly ? new String[] {
-+                "Mat Armstrong Vice Grip Garage M539 Restorations Rich Rebuilds",
-+                "Alec Steele AvE Cutting Edge Engineering Pask Makes Inheritance Machining",
-+                "PowerfulJRE Chris Williamson Shawn Ryan Show Triggernometry",
-+                "Mighty Car Mods carwow LegitStreetCars WhistlinDiesel",
-+                "MrBallen DUST Fooster IGP Real Civil Engineer",
-+                "DIY Solar Power Will Prowse GreatScott Marius Hornberger"
-+        } : new String[] {
-+                "car restoration workshop fabrication latest",
-+                "machining engineering maker projects latest",
-+                "Thailand Pattaya legal news expat latest",
-+                "solar power DIY technology latest",
-+                "automotive rebuild review latest",
-+                "podcast current affairs long form latest"
-+        };
++        List<String> subscriptionQueries = new ArrayList<>();
++        for (int i = 0; i < LOCAL_CHANNELS.length; i += 4) {
++            StringBuilder query = new StringBuilder();
++            for (int j = i; j < Math.min(i + 4, LOCAL_CHANNELS.length); j++) {
++                if (query.length() > 0) query.append(" OR ");
++                query.append('"').append(LOCAL_CHANNELS[j]).append('"');
++            }
++            subscriptionQueries.add(query.toString());
++        }
 +
-+        for (String query : queries) {
-+            curatedActions.add(YouTubeServiceManager.instance().getContentService().getSearchObserve(query)
++        List<String> relatedQueries = new ArrayList<>();
++        if (!subscriptionsOnly) {
++            relatedQueries.add("car restoration workshop fabrication");
++            relatedQueries.add("machining engineering maker projects");
++            relatedQueries.add("Thailand Pattaya legal expat news");
++            relatedQueries.add("solar power DIY technology");
++        }
++
++        // Subscription searches are loaded first and make up 75% of Home.
++        for (String query : subscriptionQueries) loadCuratedQuery(query, true, subscriptionsOnly);
++        for (String query : relatedQueries) loadCuratedQuery(query, false, false);
++    }
++
++    private void loadCuratedQuery(String query, boolean subscription, boolean subscriptionsOnly) {
++            int options = SearchOptions.TYPE_VIDEO | SearchOptions.SORT_BY_UPLOAD_DATE;
++            curatedActions.add(YouTubeServiceManager.instance().getContentService().getSearchObserve(query, options)
 +                    .subscribe(groups -> {
 +                        for (MediaGroup mediaGroup : groups) {
 +                            VideoGroup videoGroup = VideoGroup.from(mediaGroup);
 +                            if (videoGroup != null && videoGroup.getVideos() != null && !videoGroup.getVideos().isEmpty()) {
-+                                runOnUiThread(() -> adapter.appendUnique(videoGroup, 8));
++                                runOnUiThread(() -> adapter.appendCurated(videoGroup, 6, subscription, subscriptionsOnly));
 +                                break;
 +                            }
 +                        }
 +                        runOnUiThread(() -> progress.setVisibility(View.GONE));
 +                    }, error -> runOnUiThread(() -> progress.setVisibility(View.GONE))));
-+        }
 +    }
 +
 +    private void selectSectionById(int id) {
@@ -494,6 +504,8 @@ index 000000000..f8bddfc83
 +
 +    private final class VideoAdapter extends RecyclerView.Adapter<VideoHolder> {
 +        private final List<Video> videos = new ArrayList<>();
++        private final List<Video> subscriptionVideos = new ArrayList<>();
++        private final List<Video> recommendedVideos = new ArrayList<>();
 +
 +        void apply(VideoGroup group) {
 +            if (group == null || group.getVideos() == null) return;
@@ -504,18 +516,47 @@ index 000000000..f8bddfc83
 +            notifyDataSetChanged();
 +        }
 +
-+        void clear() { videos.clear(); notifyDataSetChanged(); }
-+        void appendUnique(VideoGroup group, int limit) {
++        void clear() { videos.clear(); subscriptionVideos.clear(); recommendedVideos.clear(); notifyDataSetChanged(); }
++        void appendCurated(VideoGroup group, int limit, boolean subscription, boolean subscriptionsOnly) {
++            List<Video> target = subscription ? subscriptionVideos : recommendedVideos;
 +            int added = 0;
 +            for (Video video : group.getVideos()) {
 +                boolean exists = false;
-+                for (Video current : videos) {
++                for (Video current : target) {
 +                    if (video.videoId != null && video.videoId.equals(current.videoId)) { exists = true; break; }
 +                }
-+                if (!exists) { videos.add(video); added++; }
++                if (!exists) { target.add(video); added++; }
 +                if (added >= limit) break;
 +            }
++            Comparator<Video> newestFirst = (a, b) -> Long.compare(videoAge(a), videoAge(b));
++            Collections.sort(subscriptionVideos, newestFirst);
++            Collections.sort(recommendedVideos, newestFirst);
++            videos.clear();
++            if (subscriptionsOnly) {
++                videos.addAll(subscriptionVideos);
++            } else {
++                int sub = 0, rec = 0;
++                while (sub < subscriptionVideos.size() || rec < recommendedVideos.size()) {
++                    for (int i = 0; i < 3 && sub < subscriptionVideos.size(); i++) videos.add(subscriptionVideos.get(sub++));
++                    if (rec < recommendedVideos.size()) videos.add(recommendedVideos.get(rec++));
++                }
++            }
 +            notifyDataSetChanged();
++        }
++        long videoAge(Video video) {
++            String text = String.valueOf(video.secondTitle).toLowerCase();
++            if (video.isLive || text.contains("live now")) return 0;
++            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)\\s*(second|minute|hour|day|week|month|year)").matcher(text);
++            if (!matcher.find()) return Long.MAX_VALUE - video.timestamp;
++            long value = Long.parseLong(matcher.group(1));
++            String unit = matcher.group(2);
++            if (unit.startsWith("minute")) value *= 60;
++            else if (unit.startsWith("hour")) value *= 3_600;
++            else if (unit.startsWith("day")) value *= 86_400;
++            else if (unit.startsWith("week")) value *= 604_800;
++            else if (unit.startsWith("month")) value *= 2_592_000;
++            else if (unit.startsWith("year")) value *= 31_536_000;
++            return value;
 +        }
 +        int indexOf(Video item) { return videos.indexOf(item); }
 +
@@ -676,11 +717,11 @@ index b3dddad29..b5c4f32ba 100644
      private void setupGlobalExceptionHandler() {
 diff --git a/smarttubetv/src/stmobile/res/values/strings.xml b/smarttubetv/src/stmobile/res/values/strings.xml
 new file mode 100644
-index 000000000..a7c8416ac
+index 000000000..3547eaa65
 --- /dev/null
 +++ b/smarttubetv/src/stmobile/res/values/strings.xml
 @@ -0,0 +1,4 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
-+    <string name="app_name">SmartTube Mobile v4</string>
++    <string name="app_name">SmartTube Mobile v5</string>
 +</resources>
