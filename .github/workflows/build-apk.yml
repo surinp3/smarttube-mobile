@@ -30,18 +30,22 @@ jobs:
           java-version: "11"
           cache: gradle
 
-      - name: Build mobile debug APK
+      - name: Build mobile ARM64 debug APK
         working-directory: upstream
         run: ./gradlew :smarttubetv:assembleStmobileDebug --stacktrace
 
-      - name: Collect APK
+      - name: Collect ARM64 APK
         run: |
           mkdir -p output
-          find upstream/smarttubetv/build/outputs/apk -type f -name "*.apk" -exec cp {} output/SmartTube-Mobile.apk \;
+          find upstream/smarttubetv/build/outputs/apk -type f -name "*.apk" -print
+          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name "*arm64-v8a.apk" | head -n 1)"
+          test -n "$apk_path"
+          cp "$apk_path" output/SmartTube-Mobile-ARM64.apk
+          file output/SmartTube-Mobile-ARM64.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-Mobile-APK
-          path: output/SmartTube-Mobile.apk
+          name: SmartTube-Mobile-ARM64-APK
+          path: output/SmartTube-Mobile-ARM64.apk
           if-no-files-found: error
