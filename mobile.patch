@@ -32,7 +32,7 @@ index 000000000..aaa7440c8
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8d521d439..84bfa1d0a 100644
+index 8d521d439..9d3c7e795 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -172,6 +172,14 @@ android {
@@ -43,8 +43,8 @@ index 8d521d439..84bfa1d0a 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2425
-+            versionNameSuffix "-mobile.5"
++            versionCode 2426
++            versionNameSuffix "-mobile.6"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -86,10 +86,10 @@ index e40af8cf7..149cf6856 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 000000000..eb3180b63
+index 000000000..876dd9e47
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,533 @@
+@@ -0,0 +1,572 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.content.res.Configuration;
@@ -133,6 +133,7 @@ index 000000000..eb3180b63
 +import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions;
 +import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 +import io.reactivex.disposables.CompositeDisposable;
++import io.reactivex.Observable;
 +
 +import java.util.ArrayList;
 +import java.util.LinkedHashMap;
@@ -174,6 +175,19 @@ index 000000000..eb3180b63
 +            "Call Me Chato", "Vice Grip Garage", "Chase Hughes", "Chris Williamson", "Henrik Jonsson",
 +            "BradenBuildz", "mrnigelng", "Valuetainment Short Clips", "RUDAN BROTHERS", "IGP",
 +            "M539 Plus", "carwow", "Real Civil Engineer", "AvE"
++    };
++    private static final String[] LOCAL_CHANNEL_HANDLES = {
++            "@M.BJOERNSTROEM", "@AlecSteele", "@LegitStreetCars", "@FarmCraft101", "@M539Restorations",
++            "@CuttingEdgeEngineering", "@PaskMakes", "@whistlindiesel", "@InheritanceMachining", "@WatchWesWork",
++            "@JoeyDoesTech", "@MariusHornberger", "@greatscottlab", "@RichRebuilds", "@thefoosterchannel",
++            "@WaldosWorld", "@triggerpod", "@urituchmanpigeon", "@SecretScholars", "@MaxMakerChannel",
++            "@matarmstrongmk2", "@FabulousPattaya", "@FreshSpawns", "@IntegrityLegalThailand", "@YMHClips",
++            "@craftsmanchris9859", "@joerogan", "@DarrenVanDam", "@MrBallen", "@TCNetwork",
++            "@watchdust", "@PBDPodcast", "@AsmongoldClips", "@JREClips", "@WillProwse",
++            "@mightycarmods", "@ShawnRyanShow", "@matarmstrongbmx", "@CallMeChato", "@ViceGripGarage",
++            "@chasehughesofficial", "@ChrisWillx", "@jonsson_henrik", "@BradenBuildz", "@mrnigelng",
++            "@ValuetainmentShortClips", "@RUDANBROTHERS", "@IGP", "@M539Plus", "@carwow",
++            "@RealCivilEngineerGaming", "@arduinoversusevil2025"
 +    };
 +
 +    @Override
@@ -344,16 +358,6 @@ index 000000000..eb3180b63
 +        title.setText(subscriptionsOnly ? "Subscriptions" : "Home");
 +        progress.setVisibility(View.VISIBLE);
 +
-+        List<String> subscriptionQueries = new ArrayList<>();
-+        for (int i = 0; i < LOCAL_CHANNELS.length; i += 4) {
-+            StringBuilder query = new StringBuilder();
-+            for (int j = i; j < Math.min(i + 4, LOCAL_CHANNELS.length); j++) {
-+                if (query.length() > 0) query.append(" OR ");
-+                query.append('"').append(LOCAL_CHANNELS[j]).append('"');
-+            }
-+            subscriptionQueries.add(query.toString());
-+        }
-+
 +        List<String> relatedQueries = new ArrayList<>();
 +        if (!subscriptionsOnly) {
 +            relatedQueries.add("car restoration workshop fabrication");
@@ -362,9 +366,44 @@ index 000000000..eb3180b63
 +            relatedQueries.add("solar power DIY technology");
 +        }
 +
-+        // Subscription searches are loaded first and make up 75% of Home.
-+        for (String query : subscriptionQueries) loadCuratedQuery(query, true, subscriptionsOnly);
++        loadDirectSubscriptionFeeds(subscriptionsOnly);
 +        for (String query : relatedQueries) loadCuratedQuery(query, false, false);
++    }
++
++    private void loadDirectSubscriptionFeeds(boolean subscriptionsOnly) {
++        curatedActions.add(Observable.fromArray(LOCAL_CHANNEL_HANDLES)
++                .flatMap(handle -> YouTubeServiceManager.instance().getContentService()
++                        .getChannelObserve(handle)
++                        .onErrorResumeNext(Observable.empty()), false, 6)
++                .subscribe(groups -> {
++                    MediaGroup uploads = null;
++                    for (MediaGroup group : groups) {
++                        String groupTitle = group.getTitle() == null ? "" : group.getTitle().toLowerCase();
++                        if ((groupTitle.contains("upload") || groupTitle.equals("videos") || groupTitle.contains("latest"))
++                                && !groupTitle.contains("popular") && !groupTitle.contains("short")) {
++                            uploads = group;
++                            break;
++                        }
++                    }
++                    if (uploads == null) {
++                        for (MediaGroup group : groups) {
++                            if (group.getMediaItems() != null && !group.getMediaItems().isEmpty()) {
++                                VideoGroup candidate = VideoGroup.from(group);
++                                if (candidate != null && candidate.getVideos() != null) {
++                                    for (Video video : candidate.getVideos()) {
++                                        if (video.videoId != null) { uploads = group; break; }
++                                    }
++                                }
++                            }
++                            if (uploads != null) break;
++                        }
++                    }
++                    if (uploads != null) {
++                        VideoGroup videoGroup = VideoGroup.from(uploads);
++                        runOnUiThread(() -> adapter.appendCurated(videoGroup, 3, true, subscriptionsOnly));
++                    }
++                }, error -> runOnUiThread(() -> progress.setVisibility(View.GONE)),
++                        () -> runOnUiThread(() -> progress.setVisibility(View.GONE))));
 +    }
 +
 +    private void loadCuratedQuery(String query, boolean subscription, boolean subscriptionsOnly) {
@@ -717,11 +756,11 @@ index b3dddad29..b5c4f32ba 100644
      private void setupGlobalExceptionHandler() {
 diff --git a/smarttubetv/src/stmobile/res/values/strings.xml b/smarttubetv/src/stmobile/res/values/strings.xml
 new file mode 100644
-index 000000000..3547eaa65
+index 000000000..8fe0e88dc
 --- /dev/null
 +++ b/smarttubetv/src/stmobile/res/values/strings.xml
 @@ -0,0 +1,4 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
-+    <string name="app_name">SmartTube Mobile v5</string>
++    <string name="app_name">SmartTube Mobile v6</string>
 +</resources>
