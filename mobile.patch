@@ -1,9 +1,9 @@
 diff --git a/MOBILE.md b/MOBILE.md
 new file mode 100644
-index 0000000..1d7733e
+index 0000000..db6da62
 --- /dev/null
 +++ b/MOBILE.md
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,55 @@
 +# SmartTube Mobile fork
 +
 +This fork adds an Android phone build flavor while retaining SmartTube's existing
@@ -29,6 +29,7 @@ index 0000000..1d7733e
 +- native search field and five-item bottom navigation
 +- back button and Android Back support
 +- synced subscriptions and history when a YouTube account is activated
++- continued loading of older account videos as the user scrolls
 +- signed-out Home fallback with the original local channels
 +- account connection and switching in a touch-friendly Settings page
 +- correctly scaled 16:9 thumbnails, improved typography, and duration badges
@@ -113,10 +114,10 @@ index 5a290c3..b2916c4 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 0000000..40c3bdd
+index 0000000..27f2263
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,1068 @@
+@@ -0,0 +1,1128 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.app.AlertDialog;
@@ -219,6 +220,8 @@ index 0000000..40c3bdd
 +    private final CompositeDisposable curatedActions = new CompositeDisposable();
 +    private final CompositeDisposable signInActions = new CompositeDisposable();
 +    private boolean curatedMode;
++    private MediaGroup accountPage;
++    private boolean loadingNextPage;
 +    private static final String[] LOCAL_CHANNEL_HANDLES = {
 +            "@M.BJOERNSTROEM", "@AlecSteele", "@LegitStreetCars", "@FarmCraft101", "@M539Restorations",
 +            "@CuttingEdgeEngineering", "@PaskMakes", "@whistlindiesel", "@InheritanceMachining", "@WatchWesWork",
@@ -381,6 +384,15 @@ index 0000000..40c3bdd
 +        content.setLayoutManager(layoutManager);
 +        adapter = new VideoAdapter();
 +        content.setAdapter(adapter);
++        content.addOnScrollListener(new RecyclerView.OnScrollListener() {
++            @Override
++            public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
++                if (dy > 0 && adapter.getItemCount() > 0 &&
++                        layoutManager.findLastVisibleItemPosition() >= adapter.getItemCount() - 8) {
++                    loadNextAccountPage();
++                }
++            }
++        });
 +        body.addView(content, match());
 +
 +        settingsScroll = new ScrollView(this);
@@ -511,6 +523,8 @@ index 0000000..40c3bdd
 +        curatedMode = true;
 +        settingsDetail = false;
 +        curatedActions.clear();
++        accountPage = null;
++        loadingNextPage = false;
 +        adapter.clear();
 +        settingsList.removeAllViews();
 +        setTab(subscriptionsOnly ? Tab.SUBSCRIPTIONS : Tab.HOME,
@@ -542,6 +556,8 @@ index 0000000..40c3bdd
 +                .subscribe(group -> {
 +                    VideoGroup videos = VideoGroup.from(group);
 +                    runOnUiThread(() -> {
++                        if (activeTab != (subscriptionsOnly ? Tab.SUBSCRIPTIONS : Tab.HOME)) return;
++                        accountPage = group;
 +                        if (videos != null && videos.getVideos() != null && !videos.getVideos().isEmpty()) {
 +                            emptyPanel.setVisibility(View.GONE);
 +                            adapter.appendCurated(videos, Integer.MAX_VALUE, true, subscriptionsOnly, false);
@@ -561,6 +577,8 @@ index 0000000..40c3bdd
 +        curatedMode = true;
 +        settingsDetail = false;
 +        curatedActions.clear();
++        accountPage = null;
++        loadingNextPage = false;
 +        adapter.clear();
 +        setTab(Tab.HISTORY, "History");
 +        if (!signInService().isSigned()) {
@@ -570,6 +588,8 @@ index 0000000..40c3bdd
 +        progress.setVisibility(View.VISIBLE);
 +        curatedActions.add(YouTubeServiceManager.instance().getContentService().getHistoryObserve()
 +                .subscribe(group -> runOnUiThread(() -> {
++                    if (activeTab != Tab.HISTORY) return;
++                    accountPage = group;
 +                    VideoGroup videos = VideoGroup.from(group);
 +                    if (videos != null && videos.getVideos() != null && !videos.getVideos().isEmpty()) {
 +                        adapter.apply(videos);
@@ -581,10 +601,40 @@ index 0000000..40c3bdd
 +                        showEmpty("Unable to load history. YouTube history may be disabled for this account.", false))));
 +    }
 +
++    private void loadNextAccountPage() {
++        if (loadingNextPage || accountPage == null || accountPage.getNextPageKey() == null ||
++                !signInService().isSigned() ||
++                (activeTab != Tab.HOME && activeTab != Tab.SUBSCRIPTIONS && activeTab != Tab.HISTORY)) return;
++        loadingNextPage = true;
++        final MediaGroup previous = accountPage;
++        final Tab requestedTab = activeTab;
++        curatedActions.add(YouTubeServiceManager.instance().getContentService()
++                .continueGroupObserve(previous)
++                .subscribe(next -> runOnUiThread(() -> {
++                    loadingNextPage = false;
++                    if (requestedTab != activeTab || next == null) return;
++                    if (TextUtils.equals(next.getNextPageKey(), previous.getNextPageKey())) {
++                        accountPage = null; // Stop when YouTube repeats a continuation token.
++                    } else {
++                        accountPage = next;
++                    }
++                    VideoGroup additional = VideoGroup.from(next);
++                    if (additional != null && additional.getVideos() != null && !additional.getVideos().isEmpty()) {
++                        if (activeTab == Tab.HISTORY) adapter.apply(additional);
++                        else adapter.appendCurated(additional, Integer.MAX_VALUE, true,
++                                activeTab == Tab.SUBSCRIPTIONS, false);
++                    }
++                }), error -> runOnUiThread(() -> {
++                    loadingNextPage = false;
++                    accountPage = null;
++                })));
++    }
++
 +    private void showSearch() {
 +        curatedMode = true;
 +        settingsDetail = false;
 +        curatedActions.clear();
++        accountPage = null;
 +        adapter.clear();
 +        setTab(Tab.SEARCH, "Search");
 +        progress.setVisibility(View.GONE);
@@ -820,20 +870,21 @@ index 0000000..40c3bdd
 +                .setTitle("Connect your YouTube account")
 +                .setMessage("Requesting a secure YouTube activation code…")
 +                .setNegativeButton("Cancel", (d, which) -> signInActions.clear())
-+                .setPositiveButton("Open YouTube", (d, which) -> openUrl("https://yt.be/activate"))
++                .setNeutralButton("Copy code", null)
++                .setPositiveButton("Open YouTube", (d, which) -> {
++                    copyActivationCode(activationCode[0]);
++                    openUrl("https://yt.be/activate");
++                })
 +                .create();
 +        dialog.show();
++        dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
++                .setOnClickListener(v -> copyActivationCode(activationCode[0]));
 +        signInActions.add(signInService().signInObserve().subscribe(code ->
 +                runOnUiThread(() -> {
 +                    activationCode[0] = code;
 +                    if (dialog.isShowing()) {
 +                        dialog.setMessage("Open yt.be/activate and enter this code:\n\n" + code +
 +                                "\n\nOnce approved, return to SmartTube Mobile.");
-+                        dialog.setButton(AlertDialog.BUTTON_NEUTRAL, "Copy code", (d, which) -> {
-+                            ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-+                            clipboard.setPrimaryClip(ClipData.newPlainText("YouTube activation code", activationCode[0]));
-+                            Toast.makeText(this, "Code copied", Toast.LENGTH_SHORT).show();
-+                        });
 +                    }
 +                }), error -> runOnUiThread(() -> {
 +                    dialog.dismiss();
@@ -846,6 +897,16 @@ index 0000000..40c3bdd
 +                    Toast.makeText(this, "YouTube account connected", Toast.LENGTH_SHORT).show();
 +                    loadCuratedFeed(false);
 +                })));
++    }
++
++    private void copyActivationCode(String code) {
++        if (TextUtils.isEmpty(code)) {
++            Toast.makeText(this, "Activation code is not ready yet", Toast.LENGTH_SHORT).show();
++            return;
++        }
++        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
++        clipboard.setPrimaryClip(ClipData.newPlainText("YouTube activation code", code));
++        Toast.makeText(this, "Activation code copied", Toast.LENGTH_SHORT).show();
 +    }
 +
 +    private void checkForUpdates() {
