@@ -41,16 +41,28 @@ jobs:
           java-version: "11"
           cache: gradle
 
-      - name: Configure persistent release signing when secrets are present
+      - name: Default CI artifacts to debug tests
+        run: echo "SIGNED_BUILD=false" >> "$GITHUB_ENV"
+
+      - name: Configure signing only for an explicitly published release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/main'
         env:
+          MOBILE_SIGNING_BUNDLE_B64: ${{ secrets.MOBILE_SIGNING_BUNDLE_B64 }}
           MOBILE_KEYSTORE_B64: ${{ secrets.MOBILE_KEYSTORE_B64 }}
           MOBILE_STORE_PASSWORD: ${{ secrets.MOBILE_STORE_PASSWORD }}
           MOBILE_KEY_ALIAS: ${{ secrets.MOBILE_KEY_ALIAS }}
           MOBILE_KEY_PASSWORD: ${{ secrets.MOBILE_KEY_PASSWORD }}
-          PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
-          if [ -n "$MOBILE_KEYSTORE_B64" ] && [ -n "$MOBILE_STORE_PASSWORD" ] && [ -n "$MOBILE_KEY_ALIAS" ] && [ -n "$MOBILE_KEY_PASSWORD" ]; then
-            umask 077
+          umask 077
+          if [ -n "$MOBILE_SIGNING_BUNDLE_B64" ]; then
+            printf '%s' "$MOBILE_SIGNING_BUNDLE_B64" | base64 --decode > signing-bundle.zip
+            unzip -p signing-bundle.zip keystore.properties > upstream/keystore.properties
+            unzip -p signing-bundle.zip smarttubetv/mobile-release.jks > upstream/smarttubetv/mobile-release.jks
+            test -s upstream/keystore.properties
+            test -s upstream/smarttubetv/mobile-release.jks
+            rm signing-bundle.zip
+          elif [ -n "$MOBILE_KEYSTORE_B64" ] && [ -n "$MOBILE_STORE_PASSWORD" ] && [ -n "$MOBILE_KEY_ALIAS" ] && [ -n "$MOBILE_KEY_PASSWORD" ]; then
+            # Also support the original four-secret setup.
             printf '%s' "$MOBILE_KEYSTORE_B64" | base64 --decode > upstream/smarttubetv/mobile-release.jks
             {
               printf 'storeFile=mobile-release.jks\n'
@@ -58,14 +70,11 @@ jobs:
               printf 'keyAlias=%s\n' "$MOBILE_KEY_ALIAS"
               printf 'keyPassword=%s\n' "$MOBILE_KEY_PASSWORD"
             } > upstream/keystore.properties
-            echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
           else
-            if [ "$PUBLISH_RELEASE" = "true" ]; then
-              echo "::error::A release needs all four mobile signing secrets."
-              exit 1
-            fi
-            echo "SIGNED_BUILD=false" >> "$GITHUB_ENV"
+            echo "::error::Production release requires MOBILE_SIGNING_BUNDLE_B64 (or all four legacy signing secrets)."
+            exit 1
           fi
+          echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
 
       - name: Build ARM64 APK
         working-directory: upstream
@@ -81,18 +90,24 @@ jobs:
           mkdir -p output
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
-          cp "$apk_path" output/SmartTube-Mobile-v11-ARM64.apk
-          file output/SmartTube-Mobile-v11-ARM64.apk
+          if [ "$SIGNED_BUILD" = "true" ]; then
+            cp "$apk_path" output/SmartTube-Mobile-v11-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v11-ARM64-APK" >> "$GITHUB_ENV"
+          else
+            cp "$apk_path" output/SmartTube-Mobile-v11-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v11-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+          fi
+          file output/*.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-Mobile-v11-ARM64-APK
-          path: output/SmartTube-Mobile-v11-ARM64.apk
+          name: ${{ env.APK_ARTIFACT_NAME }}
+          path: output/*.apk
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:

@@ -34,38 +34,50 @@ GitHub Actions builds the ARM64 APK from a pinned upstream SmartTube commit
 plus [mobile.patch](mobile.patch) and [mediaservice.patch](mediaservice.patch),
 which are kept compatible with that commit and its MediaServiceCore submodule.
 
-Download development builds from the **Actions** tab → latest successful
-“Build SmartTube Mobile APK” run → APK artifact.
+**Install production APKs only from [GitHub Releases](https://github.com/surinp3/smarttube-mobile/releases).**
+Ordinary Actions artifacts are disposable **DEBUG-TEST-ONLY** builds used to
+verify code changes; they are not the distribution channel and will not update
+an installed production APK.
 
 ### Seamless Android updates
 
 Android only permits in-place APK updates with the **same signing key**.
-The v6 builds were debug-signed, so an uninstall/reinstall may be necessary
-when moving to the persistent signing key.
+All pre-release versions through v11 were debug-signed, so moving to the first
+production release will require one uninstall/reinstall. Back up anything
+important before that one-time transition. Then a permanent signing key lets
+later releases update the existing app and preserve its data.
 
-For future releases, create one private Android signing keystore and save it
-in the GitHub Actions secrets (never commit the keystore or passwords):
+For production releases, create one private Android signing keystore and save
+the signing bundle as **one** GitHub Actions repository secret, named
+`MOBILE_SIGNING_BUNDLE_B64`. Its value is the single-line Base64 encoding of a
+ZIP archive containing these two files:
+
+```text
+keystore.properties
+smarttubetv/mobile-release.jks
+```
+
+`keystore.properties` contains `storeFile=mobile-release.jks`, `storePassword`,
+`keyAlias`, and `keyPassword`. Never commit or publish the bundle, its plaintext
+credentials, or the keystore. Back up the signing bundle privately: without it,
+subsequent production APKs cannot update previous installations.
+
+The original **four-secret** signing configuration also remains supported:
 
 - `MOBILE_KEYSTORE_B64`: base64 encoding of the keystore file
 - `MOBILE_STORE_PASSWORD`: keystore password
 - `MOBILE_KEY_ALIAS`: key alias
 - `MOBILE_KEY_PASSWORD`: key password
 
-When all four are configured, the workflow builds with the persistent release
-key. Without them it produces a **debug test APK only**. A debug build from one
-GitHub Actions runner is generally signed with a different key than another;
-it cannot be installed as an update over a build signed with another key. Set
-up the release signing key **once**, back it up securely, and use it for every
-future release.
+The signing secret is read **only when manually publishing a release from the
+`main` branch**, not for pull-request builds. The release workflow fails if
+signing is missing. All other builds are explicitly marked debug/test-only.
 
-To publish an update, run **Build SmartTube Mobile APK** manually from GitHub
-Actions and select `publish_release=true`. That creates a `v11` GitHub
-release with the signed APK. Future mobile versions should increment both the
-app's `MOBILE_VERSION` and the workflow's release version/tag.
+To publish an update, first merge the version into `main`. Run **Build SmartTube
+Mobile APK** manually from the `main` branch in GitHub Actions and select
+`publish_release=true`. That creates a `v11` GitHub release with a permanently
+signed APK. Future mobile versions should increment both `MOBILE_VERSION` and
+the workflow's release version/tag. The updater uses the latest published
+release, not Actions artifacts.
 
-The in-app updater reads the latest published GitHub release, not Actions
-artifacts. It works after a signed release is published, and Android requires
-the user to approve installing updates from this source. Updating from the
-current ephemeral debug-signed APK to the first persistently signed release
-will require a one-time uninstall/reinstall; subsequent releases signed with
-the same key can update in place and preserve app data.
+Android requires the user to approve installing updates from this source once.
