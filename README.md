@@ -2,8 +2,12 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v10** includes:
+Version **v11** includes:
 
+- YouTube's **normal, personalized Home recommendations**. One batch is
+  displayed in YouTube's returned order; subscription uploads and curated
+  searches are no longer forcibly mixed into Home. Subscriptions remain in
+  their own tab. A YouTube sign-in is required for this Home API.
 - YouTube account activation using SmartTube's existing sign-in, with live
   account subscriptions and history in the phone interface, including
   scrolling through older items.
@@ -23,8 +27,6 @@ Version **v10** includes:
   connection failures; authorized tokens are saved before account enrichment.
 - Settings → YouTube DNS to choose Android system, IPv4-preferred, or Google
   Public DNS (clearly marked because it may bypass phone-level Private DNS).
-
-The original 52-channel signed-out Home fallback remains available.
 
 ## Build
 
@@ -57,7 +59,7 @@ up the release signing key **once**, back it up securely, and use it for every
 future release.
 
 To publish an update, run **Build SmartTube Mobile APK** manually from GitHub
-Actions and select `publish_release=true`. That creates a `v10` GitHub
+Actions and select `publish_release=true`. That creates a `v11` GitHub
 release with the signed APK. Future mobile versions should increment both the
 app's `MOBILE_VERSION` and the workflow's release version/tag.
 

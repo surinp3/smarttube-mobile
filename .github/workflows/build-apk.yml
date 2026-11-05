@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Publish a signed v10 release for in-app updates'
+        description: 'Publish a signed v11 release for in-app updates'
         required: false
         type: boolean
         default: false
@@ -81,14 +81,14 @@ jobs:
           mkdir -p output
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
-          cp "$apk_path" output/SmartTube-Mobile-v10-ARM64.apk
-          file output/SmartTube-Mobile-v10-ARM64.apk
+          cp "$apk_path" output/SmartTube-Mobile-v11-ARM64.apk
+          file output/SmartTube-Mobile-v11-ARM64.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-Mobile-v10-ARM64-APK
-          path: output/SmartTube-Mobile-v10-ARM64.apk
+          name: SmartTube-Mobile-v11-ARM64-APK
+          path: output/SmartTube-Mobile-v11-ARM64.apk
           if-no-files-found: error
 
   release:
@@ -101,13 +101,13 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v10-ARM64-APK
+          name: SmartTube-Mobile-v11-ARM64-APK
           path: output
       - name: Publish release used by the in-app updater
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v10 output/SmartTube-Mobile-v10-ARM64.apk \
+          gh release create v11 output/SmartTube-Mobile-v11-ARM64.apk \
             --repo "$GITHUB_REPOSITORY" \
-            --title "SmartTube Mobile v10" \
-            --notes "Show YouTube cross-device watched progress as red lines on mobile thumbnails and preserve SmartTube's existing resume playback; includes in-app updater, resilient sign-in, history and mobile navigation."
+            --title "SmartTube Mobile v11" \
+            --notes "Use YouTube's normal personalized Home feed without forcing subscriptions or curated searches into recommendations. Fix Home feed jumps by rendering one result batch in native order. Includes watched-progress indicators, in-app updater, sign-in, history and mobile navigation."

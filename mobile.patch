@@ -60,7 +60,7 @@ index 0000000..db6da62
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 091bb9b..f0d50ab 100644
+index 091bb9b..9627c5f 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -177,6 +177,14 @@ android {
@@ -71,8 +71,8 @@ index 091bb9b..f0d50ab 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2463
-+            versionNameSuffix "-mobile.10"
++            versionCode 2464
++            versionNameSuffix "-mobile.11"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -114,10 +114,10 @@ index 5a290c3..b2916c4 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 0000000..56c296a
+index 0000000..f05afa6
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,1155 @@
+@@ -0,0 +1,1161 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.app.AlertDialog;
@@ -178,11 +178,13 @@ index 0000000..56c296a
 +
 +import java.net.UnknownHostException;
 +import java.util.ArrayList;
++import java.util.HashSet;
 +import java.util.LinkedHashMap;
 +import java.util.List;
 +import java.util.Map;
 +import java.util.Collections;
 +import java.util.Comparator;
++import java.util.Set;
 +
 +/** Touch-first phone shell backed by SmartTube's existing BrowsePresenter. */
 +public class MobileBrowseActivity extends MotherActivity implements BrowseView {
@@ -191,7 +193,7 @@ index 0000000..56c296a
 +    private static final int PRIMARY = Color.WHITE;
 +    private static final int SECONDARY = Color.rgb(170, 170, 170);
 +    private static final int ACCENT = Color.rgb(255, 35, 35);
-+    private static final int MOBILE_VERSION = 10;
++    private static final int MOBILE_VERSION = 11;
 +    private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
 +
 +    private final Map<Integer, BrowseSection> sections = new LinkedHashMap<>();
@@ -215,22 +217,11 @@ index 0000000..56c296a
 +    private final CompositeDisposable curatedActions = new CompositeDisposable();
 +    private final CompositeDisposable signInActions = new CompositeDisposable();
 +    private MobileUpdater mobileUpdater;
-+    private boolean curatedMode;
++    // The mobile shell owns the initial Home feed. Ignore the TV presenter's
++    // initial section render to avoid showing an unrelated feed first.
++    private boolean curatedMode = true;
 +    private MediaGroup accountPage;
 +    private boolean loadingNextPage;
-+    private static final String[] LOCAL_CHANNEL_HANDLES = {
-+            "@M.BJOERNSTROEM", "@AlecSteele", "@LegitStreetCars", "@FarmCraft101", "@M539Restorations",
-+            "@CuttingEdgeEngineering", "@PaskMakes", "@whistlindiesel", "@InheritanceMachining", "@WatchWesWork",
-+            "@JoeyDoesTech", "@MariusHornberger", "@greatscottlab", "@RichRebuilds", "@thefoosterchannel",
-+            "@WaldosWorld", "@triggerpod", "@urituchmanpigeon", "@SecretScholars", "@MaxMakerChannel",
-+            "@matarmstrongmk2", "@FabulousPattaya", "@FreshSpawns", "@IntegrityLegalThailand", "@YMHClips",
-+            "@craftsmanchris9859", "@joerogan", "@DarrenVanDam", "@MrBallen", "@TCNetwork",
-+            "@watchdust", "@PBDPodcast", "@AsmongoldClips", "@JREClips", "@WillProwse",
-+            "@mightycarmods", "@ShawnRyanShow", "@matarmstrongbmx", "@CallMeChato", "@ViceGripGarage",
-+            "@chasehughesofficial", "@ChrisWillx", "@jonsson_henrik", "@BradenBuildz", "@mrnigelng",
-+            "@ValuetainmentShortClips", "@RUDANBROTHERS", "@IGP", "@M539Plus", "@carwow",
-+            "@RealCivilEngineerGaming", "@arduinoversusevil2025"
-+    };
 +
 +    @Override
 +    protected void onCreate(Bundle state) {
@@ -533,45 +524,86 @@ index 0000000..56c296a
 +                subscriptionsOnly ? "Subscriptions" : "Home");
 +        progress.setVisibility(View.VISIBLE);
 +
-+        if (signInService().isSigned()) {
-+            loadAccountSubscriptions(subscriptionsOnly);
-+        } else if (subscriptionsOnly) {
-+            showEmpty("Sign in to display your real YouTube subscriptions.\nYour local channels remain available on Home.", true);
++        if (subscriptionsOnly) {
++            if (signInService().isSigned()) {
++                loadAccountSubscriptions();
++            } else {
++                showEmpty("Sign in to display your real YouTube subscriptions.", true);
++            }
 +        } else {
-+            loadDirectSubscriptionFeeds(false);
++            loadYouTubeHome();
 +        }
-+
-+        List<String> relatedQueries = new ArrayList<>();
-+        if (!subscriptionsOnly) {
-+            relatedQueries.add("car restoration workshop fabrication");
-+            relatedQueries.add("machining engineering maker projects");
-+            relatedQueries.add("Thailand Pattaya legal expat news");
-+            relatedQueries.add("solar power DIY technology");
-+        }
-+
-+        for (String query : relatedQueries) loadCuratedQuery(query, false, false);
 +    }
 +
-+    private void loadAccountSubscriptions(boolean subscriptionsOnly) {
++    /** Load YouTube's actual Home recommendations once, preserving their order. */
++    private void loadYouTubeHome() {
++        curatedActions.add(Observable.fromCallable(() ->
++                        YouTubeServiceManager.instance().getContentService().getHome())
++                .subscribeOn(io.reactivex.schedulers.Schedulers.io())
++                .subscribe(groups -> {
++                    List<Video> picked = new ArrayList<>();
++                    Set<String> seen = new HashSet<>();
++                    MediaGroup nextPage = null;
++                    if (groups != null) {
++                        for (MediaGroup group : groups) {
++                            if (group == null) continue;
++                            VideoGroup videos = VideoGroup.from(group);
++                            if (videos != null && videos.getVideos() != null) {
++                                for (Video video : videos.getVideos()) {
++                                    if (video != null && !TextUtils.isEmpty(video.videoId) && seen.add(video.videoId)) {
++                                        picked.add(video);
++                                    }
++                                }
++                            }
++                            if (nextPage == null && group.getNextPageKey() != null) nextPage = group;
++                        }
++                    }
++                    final MediaGroup continuation = nextPage;
++                    runOnUiThread(() -> {
++                        if (activeTab != Tab.HOME) return;
++                        progress.setVisibility(View.GONE);
++                        if (picked.isEmpty()) {
++                            showHomeUnavailable();
++                        } else {
++                            accountPage = continuation;
++                            emptyPanel.setVisibility(View.GONE);
++                            adapter.setHomeVideos(picked);
++                        }
++                    });
++                }, error -> runOnUiThread(() -> {
++                    if (activeTab != Tab.HOME) return;
++                    progress.setVisibility(View.GONE);
++                    showHomeUnavailable();
++                })));
++    }
++
++    private void showHomeUnavailable() {
++        if (!signInService().isSigned())
++            showEmpty("Connect your YouTube account to see personalized Home recommendations.", true);
++        else
++            showEmpty("YouTube recommendations couldn't be loaded. Tap Refresh to try again.", false);
++    }
++
++    private void loadAccountSubscriptions() {
 +        curatedActions.add(YouTubeServiceManager.instance().getContentService()
 +                .getSubscriptionsObserve()
 +                .subscribe(group -> {
 +                    VideoGroup videos = VideoGroup.from(group);
 +                    runOnUiThread(() -> {
-+                        if (activeTab != (subscriptionsOnly ? Tab.SUBSCRIPTIONS : Tab.HOME)) return;
++                        if (activeTab != Tab.SUBSCRIPTIONS) return;
 +                        accountPage = group;
 +                        if (videos != null && videos.getVideos() != null && !videos.getVideos().isEmpty()) {
 +                            emptyPanel.setVisibility(View.GONE);
-+                            adapter.appendCurated(videos, Integer.MAX_VALUE, true, subscriptionsOnly, false);
-+                        } else if (subscriptionsOnly) {
++                            adapter.appendCurated(videos, Integer.MAX_VALUE, true, true, false);
++                        } else {
 +                            showEmpty("No subscription videos found. Pull up Settings to check your account.", false);
 +                        }
 +                        progress.setVisibility(View.GONE);
 +                    });
 +                }, error -> runOnUiThread(() -> {
 +                    progress.setVisibility(View.GONE);
-+                    if (subscriptionsOnly) showEmpty("Couldn't load subscriptions. Check your connection and YouTube account.", false);
-+                    else Toast.makeText(this, "YouTube subscription sync failed", Toast.LENGTH_LONG).show();
++                    if (activeTab == Tab.SUBSCRIPTIONS)
++                        showEmpty("Couldn't load subscriptions. Check your connection and YouTube account.", false);
 +                })));
 +    }
 +
@@ -623,8 +655,8 @@ index 0000000..56c296a
 +                    VideoGroup additional = VideoGroup.from(next);
 +                    if (additional != null && additional.getVideos() != null && !additional.getVideos().isEmpty()) {
 +                        if (activeTab == Tab.HISTORY) adapter.apply(additional);
-+                        else adapter.appendCurated(additional, Integer.MAX_VALUE, true,
-+                                activeTab == Tab.SUBSCRIPTIONS, false);
++                        else if (activeTab == Tab.HOME) adapter.appendHomePage(additional);
++                        else adapter.appendCurated(additional, Integer.MAX_VALUE, true, true, false);
 +                    }
 +                }), error -> runOnUiThread(() -> {
 +                    loadingNextPage = false;
@@ -671,57 +703,6 @@ index 0000000..56c296a
 +                    }
 +                    runOnUiThread(() -> showEmpty("No matching videos.", false));
 +                }, error -> runOnUiThread(() -> showEmpty("Search failed. Check your connection.", false))));
-+    }
-+
-+    private void loadDirectSubscriptionFeeds(boolean subscriptionsOnly) {
-+        curatedActions.add(Observable.fromArray(LOCAL_CHANNEL_HANDLES)
-+                .flatMap(handle -> YouTubeServiceManager.instance().getContentService()
-+                        .getChannelObserve(handle)
-+                        .onErrorResumeNext(Observable.empty()), false, 6)
-+                .subscribe(groups -> {
-+                    MediaGroup uploads = null;
-+                    for (MediaGroup group : groups) {
-+                        String groupTitle = group.getTitle() == null ? "" : group.getTitle().toLowerCase();
-+                        if ((groupTitle.contains("upload") || groupTitle.equals("videos") || groupTitle.contains("latest"))
-+                                && !groupTitle.contains("popular") && !groupTitle.contains("short")) {
-+                            uploads = group;
-+                            break;
-+                        }
-+                    }
-+                    if (uploads == null) {
-+                        for (MediaGroup group : groups) {
-+                            if (group.getMediaItems() != null && !group.getMediaItems().isEmpty()) {
-+                                VideoGroup candidate = VideoGroup.from(group);
-+                                if (candidate != null && candidate.getVideos() != null) {
-+                                    for (Video video : candidate.getVideos()) {
-+                                        if (video.videoId != null) { uploads = group; break; }
-+                                    }
-+                                }
-+                            }
-+                            if (uploads != null) break;
-+                        }
-+                    }
-+                    if (uploads != null) {
-+                        VideoGroup videoGroup = VideoGroup.from(uploads);
-+                        runOnUiThread(() -> adapter.appendCurated(videoGroup, 3, true, subscriptionsOnly));
-+                    }
-+                }, error -> runOnUiThread(() -> progress.setVisibility(View.GONE)),
-+                        () -> runOnUiThread(() -> progress.setVisibility(View.GONE))));
-+    }
-+
-+    private void loadCuratedQuery(String query, boolean subscription, boolean subscriptionsOnly) {
-+            int options = SearchOptions.TYPE_VIDEO | SearchOptions.SORT_BY_UPLOAD_DATE;
-+            curatedActions.add(YouTubeServiceManager.instance().getContentService().getSearchObserve(query, options)
-+                    .subscribe(groups -> {
-+                        for (MediaGroup mediaGroup : groups) {
-+                            VideoGroup videoGroup = VideoGroup.from(mediaGroup);
-+                            if (videoGroup != null && videoGroup.getVideos() != null && !videoGroup.getVideos().isEmpty()) {
-+                                runOnUiThread(() -> adapter.appendCurated(videoGroup, 6, subscription, subscriptionsOnly));
-+                                break;
-+                            }
-+                        }
-+                        runOnUiThread(() -> progress.setVisibility(View.GONE));
-+                    }, error -> runOnUiThread(() -> progress.setVisibility(View.GONE))));
 +    }
 +
 +    private void selectSectionById(int id) {
@@ -1053,7 +1034,7 @@ index 0000000..56c296a
 +
 +    @Override
 +    public void showProgressBar(boolean show) {
-+        runOnUiThread(() -> progress.setVisibility(show ? View.VISIBLE : View.GONE));
++        if (!curatedMode) runOnUiThread(() -> progress.setVisibility(show ? View.VISIBLE : View.GONE));
 +    }
 +
 +    @Override public boolean isProgressBarShowing() { return progress.getVisibility() == View.VISIBLE; }
@@ -1065,6 +1046,31 @@ index 0000000..56c296a
 +        private final List<Video> videos = new ArrayList<>();
 +        private final List<Video> subscriptionVideos = new ArrayList<>();
 +        private final List<Video> recommendedVideos = new ArrayList<>();
++
++        /** One atomic Home update: no subscription insertion or age-based resorting. */
++        void setHomeVideos(List<Video> picks) {
++            videos.clear();
++            subscriptionVideos.clear();
++            recommendedVideos.clear();
++            videos.addAll(picks);
++            notifyDataSetChanged();
++        }
++
++        void appendHomePage(VideoGroup group) {
++            if (group == null || group.getVideos() == null) return;
++            Set<String> seen = new HashSet<>();
++            for (Video existing : videos) {
++                if (!TextUtils.isEmpty(existing.videoId)) seen.add(existing.videoId);
++            }
++            boolean changed = false;
++            for (Video video : group.getVideos()) {
++                if (video != null && !TextUtils.isEmpty(video.videoId) && seen.add(video.videoId)) {
++                    videos.add(video);
++                    changed = true;
++                }
++            }
++            if (changed) notifyDataSetChanged();
++        }
 +
 +        void apply(VideoGroup group) {
 +            if (group == null || group.getVideos() == null) return;
