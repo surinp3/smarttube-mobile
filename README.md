@@ -2,7 +2,7 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v8** includes:
+Version **v9** includes:
 
 - YouTube account activation using SmartTube's existing sign-in, with live
   account subscriptions and history in the phone interface, including
@@ -12,7 +12,9 @@ Version **v8** includes:
 - More legible video cards with 16:9 thumbnails, title/author spacing, and
   duration badges (including LIVE).
 - Clean account/switching and advanced-settings entry screen.
-- Settings → Check for updates, backed by this repository's GitHub releases.
+- Settings → Check for updates, which downloads the next signed ARM64 APK
+  directly inside the app, verifies the package/version and SHA-256 when
+  available, and starts Android's confirmation-based APK installer.
 - A resilient YouTube activation flow that continues polling after temporary
   connection failures; authorized tokens are saved before account enrichment.
 - Settings → YouTube DNS to choose Android system, IPv4-preferred, or Google
@@ -44,9 +46,20 @@ in the GitHub Actions secrets (never commit the keystore or passwords):
 - `MOBILE_KEY_PASSWORD`: key password
 
 When all four are configured, the workflow builds with the persistent release
-key. Without them it produces a **debug test APK only**.
+key. Without them it produces a **debug test APK only**. A debug build from one
+GitHub Actions runner is generally signed with a different key than another;
+it cannot be installed as an update over a build signed with another key. Set
+up the release signing key **once**, back it up securely, and use it for every
+future release.
 
 To publish an update, run **Build SmartTube Mobile APK** manually from GitHub
-Actions and select `publish_release=true`. That creates a `v8` GitHub
+Actions and select `publish_release=true`. That creates a `v9` GitHub
 release with the signed APK. Future mobile versions should increment both the
 app's `MOBILE_VERSION` and the workflow's release version/tag.
+
+The in-app updater reads the latest published GitHub release, not Actions
+artifacts. It works after a signed release is published, and Android requires
+the user to approve installing updates from this source. Updating from the
+current ephemeral debug-signed APK to the first persistently signed release
+will require a one-time uninstall/reinstall; subsequent releases signed with
+the same key can update in place and preserve app data.

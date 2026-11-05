@@ -60,7 +60,7 @@ index 0000000..db6da62
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 091bb9b..2d3b895 100644
+index 091bb9b..c7868d7 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -177,6 +177,14 @@ android {
@@ -71,8 +71,8 @@ index 091bb9b..2d3b895 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2461
-+            versionNameSuffix "-mobile.8"
++            versionCode 2462
++            versionNameSuffix "-mobile.9"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -114,10 +114,10 @@ index 5a290c3..b2916c4 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 0000000..88b0247
+index 0000000..75243e3
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,1198 @@
+@@ -0,0 +1,1129 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.app.AlertDialog;
@@ -176,13 +176,7 @@ index 0000000..88b0247
 +import io.reactivex.disposables.CompositeDisposable;
 +import io.reactivex.Observable;
 +
-+import org.json.JSONArray;
-+import org.json.JSONObject;
-+import java.net.HttpURLConnection;
-+import java.net.URL;
 +import java.net.UnknownHostException;
-+import java.io.BufferedReader;
-+import java.io.InputStreamReader;
 +import java.util.ArrayList;
 +import java.util.LinkedHashMap;
 +import java.util.List;
@@ -197,9 +191,7 @@ index 0000000..88b0247
 +    private static final int PRIMARY = Color.WHITE;
 +    private static final int SECONDARY = Color.rgb(170, 170, 170);
 +    private static final int ACCENT = Color.rgb(255, 35, 35);
-+    private static final int MOBILE_VERSION = 8;
-+    private static final String RELEASES_URL = "https://github.com/surinp3/smarttube-mobile/releases";
-+    private static final String RELEASES_API = "https://api.github.com/repos/surinp3/smarttube-mobile/releases/latest";
++    private static final int MOBILE_VERSION = 9;
 +    private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
 +
 +    private final Map<Integer, BrowseSection> sections = new LinkedHashMap<>();
@@ -222,6 +214,7 @@ index 0000000..88b0247
 +    private int selectedSection = -1;
 +    private final CompositeDisposable curatedActions = new CompositeDisposable();
 +    private final CompositeDisposable signInActions = new CompositeDisposable();
++    private MobileUpdater mobileUpdater;
 +    private boolean curatedMode;
 +    private MediaGroup accountPage;
 +    private boolean loadingNextPage;
@@ -242,6 +235,7 @@ index 0000000..88b0247
 +    @Override
 +    protected void onCreate(Bundle state) {
 +        super.onCreate(state);
++        mobileUpdater = new MobileUpdater(this, MOBILE_VERSION);
 +        buildUi();
 +        presenter = BrowsePresenter.instance(this);
 +        presenter.setView(this);
@@ -253,6 +247,7 @@ index 0000000..88b0247
 +    @Override
 +    protected void onResume() {
 +        super.onResume();
++        if (mobileUpdater != null) mobileUpdater.onResume();
 +        if (presenter != null) {
 +            presenter.setView(this);
 +            presenter.onViewResumed();
@@ -276,6 +271,7 @@ index 0000000..88b0247
 +
 +    @Override
 +    protected void onDestroy() {
++        if (mobileUpdater != null) mobileUpdater.cancel();
 +        curatedActions.clear();
 +        signInActions.clear();
 +        super.onDestroy();
@@ -797,7 +793,7 @@ index 0000000..88b0247
 +                this::chooseDnsMode);
 +        addSettingsRow("Playback & advanced settings", "Player, SponsorBlock, network and appearance",
 +                this::selectSettingsSection);
-+        addSettingsRow("About SmartTube Mobile", "Version 8 • Based on SmartTube",
++        addSettingsRow("About SmartTube Mobile", "Version 9 • Based on SmartTube",
 +                () -> new AlertDialog.Builder(this).setTitle("SmartTube Mobile")
 +                        .setMessage("Touch-friendly phone edition. Your account stays on this device.\n\n" +
 +                                BuildConfig.VERSION_NAME)
@@ -980,72 +976,7 @@ index 0000000..88b0247
 +    }
 +
 +    private void checkForUpdates() {
-+        Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show();
-+        new Thread(() -> {
-+            HttpURLConnection connection = null;
-+            try {
-+                connection = (HttpURLConnection) new URL(RELEASES_API).openConnection();
-+                connection.setConnectTimeout(9000);
-+                connection.setReadTimeout(9000);
-+                connection.setRequestProperty("Accept", "application/vnd.github+json");
-+                connection.setRequestProperty("User-Agent", "SmartTube-Mobile/" + MOBILE_VERSION);
-+                int status = connection.getResponseCode();
-+                if (status == 404) {
-+                    runOnUiThread(() -> updateMessage("No published mobile releases yet",
-+                            "The in-app checker is ready; builds must be published as GitHub releases.", RELEASES_URL));
-+                    return;
-+                }
-+                if (status != 200) throw new IllegalStateException("GitHub returned HTTP " + status);
-+                StringBuilder body = new StringBuilder();
-+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-+                    String line;
-+                    while ((line = reader.readLine()) != null && body.length() < 500_000) body.append(line);
-+                }
-+                JSONObject release = new JSONObject(body.toString());
-+                String tag = release.optString("tag_name", "");
-+                java.util.regex.Matcher matcher = java.util.regex.Pattern
-+                        .compile("(?i)(?:mobile[-_ ]?)?v?(\\d+)").matcher(tag);
-+                if (!matcher.find()) throw new IllegalStateException("Unrecognized release version: " + tag);
-+                int latestVersion = Integer.parseInt(matcher.group(1));
-+                JSONArray assets = release.optJSONArray("assets");
-+                String downloadUrl = null;
-+                if (assets != null) {
-+                    for (int i = 0; i < assets.length(); i++) {
-+                        JSONObject asset = assets.optJSONObject(i);
-+                        if (asset == null) continue;
-+                        String name = asset.optString("name").toLowerCase();
-+                        if (name.endsWith(".apk") && name.contains("arm64")) {
-+                            downloadUrl = asset.optString("browser_download_url");
-+                            break;
-+                        }
-+                    }
-+                }
-+                String releaseUrl = release.optString("html_url", RELEASES_URL);
-+                if (!releaseUrl.startsWith(RELEASES_URL)) releaseUrl = RELEASES_URL;
-+                final String trustedUrl = downloadUrl != null && downloadUrl.startsWith(RELEASES_URL + "/download/")
-+                        ? downloadUrl : releaseUrl;
-+                runOnUiThread(() -> {
-+                    if (latestVersion > MOBILE_VERSION) {
-+                        updateMessage("SmartTube Mobile v" + latestVersion + " is available",
-+                                "Download the new signed APK and open it to update.", trustedUrl);
-+                    } else {
-+                        updateMessage("You're up to date", "Version " + MOBILE_VERSION + " is the latest published mobile release.", null);
-+                    }
-+                });
-+            } catch (Exception error) {
-+                runOnUiThread(() -> updateMessage("Update check failed",
-+                        "Couldn't reach GitHub releases. Check your connection and try again.", RELEASES_URL));
-+            } finally {
-+                if (connection != null) connection.disconnect();
-+            }
-+        }).start();
-+    }
-+
-+    private void updateMessage(String heading, String detail, String url) {
-+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-+                .setTitle(heading).setMessage(detail).setNegativeButton("Close", null);
-+        if (url != null) builder.setPositiveButton("Open download", (dialog, which) -> openUrl(url));
-+        builder.show();
++        mobileUpdater.checkForUpdates();
 +    }
 +
 +    private void openUrl(String url) {
@@ -1316,6 +1247,358 @@ index 0000000..88b0247
 +    private static ViewGroup.LayoutParams wrap() { return new ViewGroup.LayoutParams(-2, -2); }
 +    private static LinearLayout.LayoutParams wrapWidth() { return new LinearLayout.LayoutParams(-1, -2); }
 +}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileUpdater.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileUpdater.java
+new file mode 100644
+index 0000000..4d6ead4
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileUpdater.java
+@@ -0,0 +1,346 @@
++package com.liskovsoft.smartyoutubetv2.mobile.ui;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.ActivityNotFoundException;
++import android.content.Intent;
++import android.content.pm.PackageInfo;
++import android.net.Uri;
++import android.os.Build;
++import android.provider.Settings;
++import android.text.TextUtils;
++import android.widget.ProgressBar;
++import android.widget.Toast;
++
++import com.liskovsoft.sharedutils.helpers.FileHelpers;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.InputStreamReader;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.security.MessageDigest;
++import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++/**
++ * GitHub-release updater for the phone flavor. The download and APK validation
++ * happen inside the app; Android's own installer still asks the user to approve
++ * installing the update. Signing continuity is enforced by Android.
++ */
++final class MobileUpdater {
++    private static final String RELEASES_URL = "https://github.com/surinp3/smarttube-mobile/releases";
++    private static final String RELEASES_API = "https://api.github.com/repos/surinp3/smarttube-mobile/releases/latest";
++    private static final String APK_MIME = "application/vnd.android.package-archive";
++    private static final long MAX_APK_BYTES = 200L * 1024 * 1024;
++    private static final int MIN_APK_BYTES = 1_000_000;
++    private final Activity activity;
++    private final int installedVersion;
++    private final AtomicBoolean cancelDownload = new AtomicBoolean();
++    private volatile boolean checking;
++    private volatile boolean downloading;
++    private File pendingInstall;
++
++    MobileUpdater(Activity activity, int installedVersion) {
++        this.activity = activity;
++        this.installedVersion = installedVersion;
++    }
++
++    void checkForUpdates() {
++        if (checking || downloading) {
++            Toast.makeText(activity, "An update is already being checked or downloaded", Toast.LENGTH_SHORT).show();
++            return;
++        }
++        checking = true;
++        Toast.makeText(activity, "Checking for updates…", Toast.LENGTH_SHORT).show();
++        new Thread(() -> {
++            try {
++                Release release = fetchLatestRelease();
++                onUi(() -> showRelease(release));
++            } catch (Exception error) {
++                onUi(() -> showMessage("Update check failed",
++                        "Couldn't read GitHub releases: " + safeMessage(error), RELEASES_URL));
++            } finally {
++                checking = false;
++            }
++        }, "SmartTube-mobile-update-check").start();
++    }
++
++    private Release fetchLatestRelease() throws Exception {
++        HttpURLConnection connection = (HttpURLConnection) new URL(RELEASES_API).openConnection();
++        try {
++            connection.setConnectTimeout(10_000);
++            connection.setReadTimeout(20_000);
++            connection.setRequestProperty("Accept", "application/vnd.github+json");
++            connection.setRequestProperty("User-Agent", "SmartTube-Mobile/" + installedVersion);
++            int status = connection.getResponseCode();
++            if (status == 404) return null;
++            if (status != 200) throw new IOException("GitHub returned HTTP " + status);
++
++            StringBuilder result = new StringBuilder();
++            try (BufferedReader input = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
++                String line;
++                while ((line = input.readLine()) != null) {
++                    result.append(line);
++                    if (result.length() > 500_000) throw new IOException("Release information too large");
++                }
++            }
++            JSONObject json = new JSONObject(result.toString());
++            Matcher match = Pattern.compile("^v(\\d+)$", Pattern.CASE_INSENSITIVE)
++                    .matcher(json.optString("tag_name", ""));
++            if (!match.matches()) throw new IOException("Unknown mobile release version");
++            int version = Integer.parseInt(match.group(1));
++            String expectedName = "SmartTube-Mobile-v" + version + "-ARM64.apk";
++            String expectedPrefix = RELEASES_URL + "/download/v" + version + "/";
++            String apkUrl = null;
++            String sha256 = null;
++            JSONArray assets = json.optJSONArray("assets");
++            if (assets != null) {
++                for (int i = 0; i < assets.length(); i++) {
++                    JSONObject asset = assets.optJSONObject(i);
++                    if (asset == null || !expectedName.equals(asset.optString("name"))) continue;
++                    String url = asset.optString("browser_download_url");
++                    if (!url.equals(expectedPrefix + expectedName)) continue;
++                    apkUrl = url;
++                    String digest = asset.optString("digest", "");
++                    if (digest.startsWith("sha256:")) sha256 = digest.substring(7);
++                    else if (!TextUtils.isEmpty(digest)) throw new IOException("Unsupported APK digest");
++                    break;
++                }
++            }
++            String page = json.optString("html_url", RELEASES_URL);
++            if (!page.startsWith(RELEASES_URL)) page = RELEASES_URL;
++            return new Release(version, apkUrl, sha256, page);
++        } finally {
++            connection.disconnect();
++        }
++    }
++
++    private void showRelease(Release release) {
++        if (release == null) {
++            showMessage("No published updates yet",
++                    "An APK must be published as a signed GitHub release before the in-app updater can install it.",
++                    RELEASES_URL);
++        } else if (release.version <= installedVersion) {
++            showMessage("You're up to date", "SmartTube Mobile v" + installedVersion + " is current.", null);
++        } else if (release.apkUrl == null) {
++            showMessage("Mobile v" + release.version + " is available",
++                    "This release has no ARM64 APK attached yet.", release.pageUrl);
++        } else {
++            new AlertDialog.Builder(activity)
++                    .setTitle("SmartTube Mobile v" + release.version + " available")
++                    .setMessage("Download the update inside SmartTube Mobile, then approve installation in Android. " +
++                            "Your subscriptions and app settings will be preserved if both versions use the same signing key.")
++                    .setNegativeButton("Later", null)
++                    .setNeutralButton("Release notes", (dialog, which) -> openRelease(release.pageUrl))
++                    .setPositiveButton("Download & install", (dialog, which) -> download(release))
++                    .show();
++        }
++    }
++
++    private void download(Release release) {
++        if (downloading) return;
++        downloading = true;
++        cancelDownload.set(false);
++        ProgressBar bar = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
++        bar.setIndeterminate(true);
++        bar.setMax(100);
++        AlertDialog dialog = new AlertDialog.Builder(activity)
++                .setTitle("Downloading SmartTube Mobile v" + release.version)
++                .setMessage("Connecting to GitHub…")
++                .setView(bar)
++                .setNegativeButton("Cancel", (d, which) -> cancelDownload.set(true))
++                .create();
++        dialog.setOnCancelListener(d -> cancelDownload.set(true));
++        dialog.show();
++
++        new Thread(() -> {
++            File apk = null;
++            boolean completed = false;
++            try {
++                apk = File.createTempFile("smarttube-mobile-v" + release.version + "-", ".apk", activity.getCacheDir());
++                downloadApk(release, apk, dialog, bar);
++                if (cancelDownload.get()) return;
++                completed = true;
++                File readyApk = apk;
++                onUi(() -> {
++                    dialog.dismiss();
++                    install(readyApk);
++                });
++            } catch (Exception error) {
++                if (!cancelDownload.get()) {
++                    onUi(() -> {
++                        dialog.dismiss();
++                        showMessage("Update download failed", safeMessage(error), release.pageUrl);
++                    });
++                }
++            } finally {
++                // Only a validated APK should survive in the app cache for
++                // Android's installer. Remove cancelled or corrupt downloads.
++                if (!completed && apk != null) apk.delete();
++                downloading = false;
++            }
++        }, "SmartTube-mobile-update-download").start();
++    }
++
++    private void downloadApk(Release release, File file, AlertDialog dialog, ProgressBar bar) throws Exception {
++        HttpURLConnection connection = (HttpURLConnection) new URL(release.apkUrl).openConnection();
++        try {
++            connection.setConnectTimeout(15_000);
++            connection.setReadTimeout(30_000);
++            connection.setRequestProperty("User-Agent", "SmartTube-Mobile/" + installedVersion);
++            int status = connection.getResponseCode();
++            if (status != 200) throw new IOException("APK download returned HTTP " + status);
++            long expectedSize = connection.getContentLengthLong();
++            if (expectedSize > MAX_APK_BYTES) throw new IOException("APK is unexpectedly large");
++
++            MessageDigest hash = MessageDigest.getInstance("SHA-256");
++            long received = 0;
++            int lastProgress = -1;
++            byte[] buffer = new byte[64 * 1024];
++            try (InputStream input = connection.getInputStream();
++                 FileOutputStream output = new FileOutputStream(file)) {
++                int count;
++                while ((count = input.read(buffer)) != -1) {
++                    if (cancelDownload.get()) throw new IOException("Download cancelled");
++                    received += count;
++                    if (received > MAX_APK_BYTES) throw new IOException("APK is unexpectedly large");
++                    output.write(buffer, 0, count);
++                    hash.update(buffer, 0, count);
++                    if (expectedSize > 0) {
++                        int progress = (int) (100 * received / expectedSize);
++                        if (progress >= lastProgress + 5 || progress == 100) {
++                            lastProgress = progress;
++                            int shown = Math.min(100, progress);
++                            onUi(() -> {
++                                if (dialog.isShowing()) {
++                                    bar.setIndeterminate(false);
++                                    bar.setProgress(shown);
++                                    dialog.setMessage(shown + "% downloaded");
++                                }
++                            });
++                        }
++                    }
++                }
++            }
++            if (received < MIN_APK_BYTES || (expectedSize >= 0 && received != expectedSize)) {
++                throw new IOException("APK download was incomplete");
++            }
++            if (!TextUtils.isEmpty(release.sha256)) {
++                StringBuilder actual = new StringBuilder();
++                for (byte value : hash.digest()) actual.append(String.format("%02x", value & 0xff));
++                if (!release.sha256.matches("[0-9a-fA-F]{64}") ||
++                        !release.sha256.equalsIgnoreCase(actual.toString())) {
++                    throw new IOException("APK SHA-256 integrity check failed");
++                }
++            }
++            PackageInfo info = activity.getPackageManager().getPackageArchiveInfo(file.getAbsolutePath(), 0);
++            if (info == null || !activity.getPackageName().equals(info.packageName) ||
++                    info.versionCode <= activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionCode) {
++                throw new IOException("APK package or version does not match this app");
++            }
++        } finally {
++            connection.disconnect();
++        }
++    }
++
++    private void install(File apk) {
++        if (!apk.isFile()) {
++            showMessage("Update file missing", "Please download the update again.", null);
++            return;
++        }
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
++                !activity.getPackageManager().canRequestPackageInstalls()) {
++            pendingInstall = apk;
++            new AlertDialog.Builder(activity)
++                    .setTitle("Allow SmartTube to install updates")
++                    .setMessage("Android requires you to allow updates from this app once. " +
++                            "Return here after enabling 'Allow from this source'.")
++                    .setNegativeButton("Later", null)
++                    .setPositiveButton("Open Android settings", (dialog, which) -> {
++                        Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
++                                Uri.parse("package:" + activity.getPackageName()));
++                        try {
++                            activity.startActivity(intent);
++                        } catch (ActivityNotFoundException error) {
++                            showMessage("Can't open install settings", "Enable installs from this app in Android settings.", null);
++                        }
++                    }).show();
++            return;
++        }
++        pendingInstall = null;
++        Uri uri = FileHelpers.getFileUri(activity, apk.getAbsolutePath());
++        if (uri == null) {
++            showMessage("Cannot open update", "Android could not share the downloaded APK with its installer.", null);
++            return;
++        }
++        Intent intent = new Intent(Intent.ACTION_VIEW);
++        intent.setDataAndType(uri, APK_MIME);
++        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
++        try {
++            activity.startActivity(intent);
++        } catch (ActivityNotFoundException | SecurityException error) {
++            showMessage("Cannot start Android installer", safeMessage(error), null);
++        }
++    }
++
++    void onResume() {
++        if (pendingInstall != null && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
++                activity.getPackageManager().canRequestPackageInstalls())) {
++            File apk = pendingInstall;
++            pendingInstall = null;
++            install(apk);
++        }
++    }
++
++    void cancel() {
++        cancelDownload.set(true);
++    }
++
++    private void showMessage(String title, String detail, String url) {
++        AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle(title)
++                .setMessage(detail).setNegativeButton("Close", null);
++        if (url != null) builder.setPositiveButton("View releases", (d, which) -> openRelease(url));
++        builder.show();
++    }
++
++    private void openRelease(String url) {
++        try {
++            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
++        } catch (ActivityNotFoundException error) {
++            Toast.makeText(activity, "No browser installed", Toast.LENGTH_LONG).show();
++        }
++    }
++
++    private void onUi(Runnable action) {
++        activity.runOnUiThread(() -> {
++            if (!activity.isFinishing() && !activity.isDestroyed()) action.run();
++        });
++    }
++
++    private static String safeMessage(Exception error) {
++        String message = error.getMessage();
++        return TextUtils.isEmpty(message) ? "Check your connection and try again." : message;
++    }
++
++    private static final class Release {
++        final int version;
++        final String apkUrl;
++        final String sha256;
++        final String pageUrl;
++
++        Release(int version, String apkUrl, String sha256, String pageUrl) {
++            this.version = version;
++            this.apkUrl = apkUrl;
++            this.sha256 = sha256;
++            this.pageUrl = pageUrl;
++        }
++    }
++}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
 index 91f5f82..feb2ebb 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
@@ -1424,6 +1707,17 @@ index 91f5f82..feb2ebb 100644
      }
  
      /**
+diff --git a/smarttubetv/src/stmobile/AndroidManifest.xml b/smarttubetv/src/stmobile/AndroidManifest.xml
+new file mode 100644
+index 0000000..56ed072
+--- /dev/null
++++ b/smarttubetv/src/stmobile/AndroidManifest.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
++    <!-- Android 8+ requires user approval for in-app APK installation. -->
++    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
++</manifest>
 diff --git a/smarttubetv/src/stmobile/res/values/strings.xml b/smarttubetv/src/stmobile/res/values/strings.xml
 new file mode 100644
 index 0000000..0dba77b
