@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Publish a signed v7 release for in-app updates'
+        description: 'Publish a signed v8 release for in-app updates'
         required: false
         type: boolean
         default: false
@@ -30,6 +30,8 @@ jobs:
           git -C upstream submodule update --init --recursive
           git -C upstream apply --check ../mobile.patch
           git -C upstream apply ../mobile.patch
+          git -C upstream/MediaServiceCore apply --check ../../mediaservice.patch
+          git -C upstream/MediaServiceCore apply ../../mediaservice.patch
           chmod +x upstream/gradlew
 
       - name: Set up Java 11
@@ -79,14 +81,14 @@ jobs:
           mkdir -p output
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
-          cp "$apk_path" output/SmartTube-Mobile-v7-ARM64.apk
-          file output/SmartTube-Mobile-v7-ARM64.apk
+          cp "$apk_path" output/SmartTube-Mobile-v8-ARM64.apk
+          file output/SmartTube-Mobile-v8-ARM64.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-Mobile-v7-ARM64-APK
-          path: output/SmartTube-Mobile-v7-ARM64.apk
+          name: SmartTube-Mobile-v8-ARM64-APK
+          path: output/SmartTube-Mobile-v8-ARM64.apk
           if-no-files-found: error
 
   release:
@@ -99,13 +101,13 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v7-ARM64-APK
+          name: SmartTube-Mobile-v8-ARM64-APK
           path: output
       - name: Publish release used by the in-app updater
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v7 output/SmartTube-Mobile-v7-ARM64.apk \
+          gh release create v8 output/SmartTube-Mobile-v8-ARM64.apk \
             --repo "$GITHUB_REPOSITORY" \
-            --title "SmartTube Mobile v7" \
-            --notes "Account-backed subscriptions and history; touch-friendly bottom bar, Back, settings, duration badges and in-app update checking."
+            --title "SmartTube Mobile v8" \
+            --notes "Reliable YouTube authorization polling and saved tokens after temporary DNS errors; selectable DNS in Settings. Includes mobile navigation, subscriptions, history, duration badges and in-app update checking."

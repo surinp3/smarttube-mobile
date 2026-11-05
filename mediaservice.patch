@@ -1,0 +1,123 @@
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/auth/V2/AuthService.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/auth/V2/AuthService.java
+index 5813a05..e6b2de2 100644
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/auth/V2/AuthService.java
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/auth/V2/AuthService.java
+@@ -11,6 +11,10 @@ import com.liskovsoft.googlecommon.common.models.auth.info.AccountsList;
+ import com.liskovsoft.googlecommon.common.helpers.RetrofitHelper;
+ import retrofit2.Call;
+ 
++import java.net.ConnectException;
++import java.net.SocketException;
++import java.net.SocketTimeoutException;
++import java.net.UnknownHostException;
+ import java.util.List;
+ 
+ public class AuthService {
+@@ -87,7 +91,20 @@ public class AuthService {
+         for (int i = 0; i < REFRESH_TOKEN_ATTEMPTS; i++) {
+             Thread.sleep(REFRESH_TOKEN_ATTEMPT_INTERVAL_MS);
+ 
+-            tokenResult = getAccessToken(deviceCode);
++            try {
++                tokenResult = getAccessToken(deviceCode);
++            } catch (IllegalStateException error) {
++                // A brief DNS outage should not invalidate a code the user has
++                // already approved on yt.be/activate. Keep polling until the
++                // original authorization window expires or the user cancels.
++                if (!isTransientNetworkFailure(error)) {
++                    throw error;
++                }
++                if (i % 10 == 0) {
++                    Log.w(TAG, "Temporary network error while waiting for YouTube authorization; retrying");
++                }
++                continue;
++            }
+ 
+             if (tokenResult != null && tokenResult.getRefreshToken() != null) {
+                 break;
+@@ -97,14 +114,10 @@ public class AuthService {
+         if (tokenResult != null && tokenResult.getRefreshToken() != null) {
+             return tokenResult;
+         } else {
+-            String msg = String.format("Error. Refresh token is empty!\nDebug data: device code: %s, client id: %s, client secret: %s\nError msg: %s",
+-                    deviceCode,
+-                    mAppService.getClientId(),
+-                    mAppService.getClientSecret(),
+-                    tokenResult != null ? tokenResult.getError() : "");
+-
++            // Never include the device code or OAuth client secret in logs.
++            String msg = "YouTube authorization timed out or returned no refresh token";
+             Log.e(TAG, msg);
+-            throw new IllegalStateException(msg);
++            throw new IllegalStateException(msg + ". Check the connection and request a new code.");
+         }
+     }
+ 
+@@ -113,10 +126,33 @@ public class AuthService {
+      */
+     @Nullable
+     public List<AccountInt> getAccounts() {
+-        Call<AccountsList> wrapper = mAuthApi.getAccountsList(AuthApiHelper.getAccountsListQuery());
+-
+-        AccountsList accountsList = RetrofitHelper.get(wrapper);
++        for (int attempt = 0; attempt < 3; attempt++) {
++            try {
++                Call<AccountsList> wrapper = mAuthApi.getAccountsList(AuthApiHelper.getAccountsListQuery());
++                AccountsList accountsList = RetrofitHelper.get(wrapper);
++                return accountsList != null ? accountsList.getAccounts() : null;
++            } catch (IllegalStateException error) {
++                if (!isTransientNetworkFailure(error) || attempt == 2) {
++                    throw error;
++                }
++                try {
++                    Thread.sleep(1_000);
++                } catch (InterruptedException interrupted) {
++                    Thread.currentThread().interrupt();
++                    throw new IllegalStateException("YouTube account lookup interrupted", interrupted);
++                }
++            }
++        }
++        return null;
++    }
+ 
+-        return accountsList != null ? accountsList.getAccounts() : null;
++    private static boolean isTransientNetworkFailure(Throwable error) {
++        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
++            if (cause instanceof UnknownHostException || cause instanceof SocketTimeoutException ||
++                    cause instanceof ConnectException || cause instanceof SocketException) {
++                return true;
++            }
++        }
++        return false;
+     }
+ }
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/internal/YouTubeAccountManager.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/internal/YouTubeAccountManager.java
+index acb3646..387f8d9 100644
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/internal/YouTubeAccountManager.java
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/internal/YouTubeAccountManager.java
+@@ -113,17 +113,21 @@ public class YouTubeAccountManager {
+         // Create initial account (with only refresh key)
+         YouTubeAccount tempAccount = YouTubeAccount.fromToken(refreshToken);
+         addAccount(tempAccount);
++        // Keep the authorized token even if a subsequent DNS failure prevents
++        // the first account-details request from finishing. SmartTube can fill
++        // in the account details on a later connection.
++        persistAccounts();
+ 
+         // Use initial account to create auth header and fetch the accounts below
+         mSignInService.invalidateCache();
+         mSignInService.checkAuth();
+ 
+-        // Remove initial account (with only refresh key)
+-        mAccounts.remove(tempAccount); // multi thread fix
+-
+         List<AccountInt> accountsInt = getAuthService().getAccounts(); // runs under auth header from above
+ 
+-        if (accountsInt != null) {
++        if (accountsInt != null && !accountsInt.isEmpty()) {
++            // Do not discard the only saved refresh token when account lookup
++            // returned no usable accounts (for example during an outage).
++            mAccounts.remove(tempAccount);
+             for (AccountInt accountInt : accountsInt) {
+                 YouTubeAccount account = YouTubeAccount.from(accountInt);
+                 account.setRefreshToken(refreshToken);

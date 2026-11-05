@@ -60,7 +60,7 @@ index 0000000..db6da62
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 091bb9b..c42757f 100644
+index 091bb9b..2d3b895 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -177,6 +177,14 @@ android {
@@ -71,8 +71,8 @@ index 091bb9b..c42757f 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2460
-+            versionNameSuffix "-mobile.7"
++            versionCode 2461
++            versionNameSuffix "-mobile.8"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -114,10 +114,10 @@ index 5a290c3..b2916c4 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 0000000..27f2263
+index 0000000..88b0247
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,1128 @@
+@@ -0,0 +1,1198 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.app.AlertDialog;
@@ -166,6 +166,8 @@ index 0000000..27f2263
 +import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 +import com.liskovsoft.mediaserviceinterfaces.SignInService;
 +import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
++import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
++import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 +import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
 +import com.liskovsoft.smartyoutubetv2.tv.R;
 +import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
@@ -178,6 +180,7 @@ index 0000000..27f2263
 +import org.json.JSONObject;
 +import java.net.HttpURLConnection;
 +import java.net.URL;
++import java.net.UnknownHostException;
 +import java.io.BufferedReader;
 +import java.io.InputStreamReader;
 +import java.util.ArrayList;
@@ -194,7 +197,7 @@ index 0000000..27f2263
 +    private static final int PRIMARY = Color.WHITE;
 +    private static final int SECONDARY = Color.rgb(170, 170, 170);
 +    private static final int ACCENT = Color.rgb(255, 35, 35);
-+    private static final int MOBILE_VERSION = 7;
++    private static final int MOBILE_VERSION = 8;
 +    private static final String RELEASES_URL = "https://github.com/surinp3/smarttube-mobile/releases";
 +    private static final String RELEASES_API = "https://api.github.com/repos/surinp3/smarttube-mobile/releases/latest";
 +    private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
@@ -790,9 +793,11 @@ index 0000000..27f2263
 +        addSettingsHeading("App");
 +        addSettingsRow("Check for updates", "Installed: " + BuildConfig.VERSION_NAME,
 +                this::checkForUpdates);
++        addSettingsRow("YouTube DNS", dnsModeLabel() + " • Change if YouTube won't connect",
++                this::chooseDnsMode);
 +        addSettingsRow("Playback & advanced settings", "Player, SponsorBlock, network and appearance",
 +                this::selectSettingsSection);
-+        addSettingsRow("About SmartTube Mobile", "Version 7 • Based on SmartTube",
++        addSettingsRow("About SmartTube Mobile", "Version 8 • Based on SmartTube",
 +                () -> new AlertDialog.Builder(this).setTitle("SmartTube Mobile")
 +                        .setMessage("Touch-friendly phone edition. Your account stays on this device.\n\n" +
 +                                BuildConfig.VERSION_NAME)
@@ -834,6 +839,47 @@ index 0000000..27f2263
 +        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
 +        params.bottomMargin = dp(8);
 +        settingsList.addView(row, params);
++    }
++
++    private String dnsModeLabel() {
++        switch (GlobalPreferences.instance(this).getPreferredDnsType()) {
++            case GlobalPreferences.DNS_TYPE_IPV4:
++                return "Prefer IPv4";
++            case GlobalPreferences.DNS_TYPE_GOOGLE:
++                return "Google Public DNS";
++            default:
++                return "Android system DNS";
++        }
++    }
++
++    private void chooseDnsMode() {
++        final int[] modes = {GlobalPreferences.DNS_TYPE_SYSTEM,
++                GlobalPreferences.DNS_TYPE_IPV4, GlobalPreferences.DNS_TYPE_GOOGLE};
++        String[] labels = {"Android system DNS (uses Private DNS)",
++                "Prefer IPv4 (uses phone DNS)",
++                "Google Public DNS (may bypass Private DNS)"};
++        int checked = 0;
++        int current = GlobalPreferences.instance(this).getPreferredDnsType();
++        for (int i = 0; i < modes.length; i++) {
++            if (modes[i] == current) checked = i;
++        }
++        new AlertDialog.Builder(this)
++                .setTitle("YouTube DNS")
++                .setMessage("SmartTube's developer recommends trying IPv4 when YouTube host lookup fails. " +
++                        "Google DNS can bypass phone-level DNS filtering, so choose it only if you want that.")
++                .setSingleChoiceItems(labels, checked, (dialog, selected) -> {
++                    dialog.dismiss();
++                    if (modes[selected] == current) return;
++                    new AlertDialog.Builder(this)
++                            .setTitle("Restart SmartTube Mobile?")
++                            .setMessage("The new DNS mode requires the app to restart.")
++                            .setNegativeButton("Cancel", null)
++                            .setPositiveButton("Change & restart", (confirm, which) -> {
++                                GlobalPreferences.instance(this).setPreferredDnsType(modes[selected]);
++                                Utils.restartTheApp(this);
++                            }).show();
++                })
++                .setNegativeButton("Cancel", null).show();
 +    }
 +
 +    private GradientDrawable roundBackground(int color, int radiusDp) {
@@ -888,15 +934,39 @@ index 0000000..27f2263
 +                    }
 +                }), error -> runOnUiThread(() -> {
 +                    dialog.dismiss();
-+                    new AlertDialog.Builder(this).setTitle("Sign-in failed")
-+                            .setMessage(error.getMessage() != null ? error.getMessage() : "Please try again.")
-+                            .setPositiveButton("OK", null).show();
++                    if (isDnsFailure(error)) {
++                        new AlertDialog.Builder(this)
++                                .setTitle("Can't reach YouTube")
++                                .setMessage("The code may have been accepted at yt.be, but SmartTube Mobile " +
++                                        "couldn't resolve www.youtube.com afterward. Check Wi-Fi/mobile data " +
++                                        "and your phone's Private DNS (AdGuard/NextDNS). Try Prefer IPv4 " +
++                                        "in the app's DNS settings if the connection still fails.")
++                                .setNegativeButton("Close", null)
++                                .setNeutralButton("New code", (d, which) -> startAccountSignIn())
++                                .setPositiveButton("DNS options", (d, which) -> chooseDnsMode())
++                                .show();
++                    } else {
++                        new AlertDialog.Builder(this).setTitle("Sign-in failed")
++                                .setMessage(error.getMessage() != null ? error.getMessage() : "Please try again.")
++                                .setPositiveButton("OK", null).show();
++                    }
 +                }), () -> runOnUiThread(() -> {
 +                    dialog.dismiss();
 +                    lastAccountId = accountId();
 +                    Toast.makeText(this, "YouTube account connected", Toast.LENGTH_SHORT).show();
 +                    loadCuratedFeed(false);
 +                })));
++    }
++
++    private boolean isDnsFailure(Throwable error) {
++        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
++            if (cause instanceof UnknownHostException ||
++                    (cause.getMessage() != null &&
++                            cause.getMessage().contains("Unable to resolve host"))) {
++                return true;
++            }
++        }
++        return false;
 +    }
 +
 +    private void copyActivationCode(String code) {
@@ -1247,10 +1317,18 @@ index 0000000..27f2263
 +    private static LinearLayout.LayoutParams wrapWidth() { return new LinearLayout.LayoutParams(-1, -2); }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-index 91f5f82..64f950f 100644
+index 91f5f82..feb2ebb 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-@@ -8,6 +8,7 @@ import androidx.work.Configuration;
+@@ -1,6 +1,7 @@
+ package com.liskovsoft.smartyoutubetv2.tv.ui.main;
+ 
+ import android.os.Build.VERSION;
++import android.content.SharedPreferences;
+ 
+ import androidx.annotation.NonNull;
+ import androidx.multidex.MultiDexApplication;
+@@ -8,6 +9,7 @@ import androidx.work.Configuration;
  
  import com.liskovsoft.sharedutils.helpers.Helpers;
  import com.liskovsoft.sharedutils.helpers.MessageHelpers;
@@ -1258,7 +1336,7 @@ index 91f5f82..64f950f 100644
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.BrowseSection;
  import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
  import com.liskovsoft.smartyoutubetv2.common.app.views.AddDeviceView;
-@@ -24,6 +25,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
+@@ -24,6 +26,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
  import com.liskovsoft.smartyoutubetv2.common.prefs.NetworkData;
  import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
  import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
@@ -1266,7 +1344,7 @@ index 91f5f82..64f950f 100644
  import com.liskovsoft.smartyoutubetv2.tv.ui.adddevice.AddDeviceActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.channel.ChannelActivity;
-@@ -33,7 +35,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.dialogs.AppDialogActivityOpaque;
+@@ -33,7 +36,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.dialogs.AppDialogActivityOpaque;
  import com.liskovsoft.smartyoutubetv2.tv.ui.playback.PlaybackActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.search.tags.SearchTagsActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.signin.SignInActivity;
@@ -1277,7 +1355,7 @@ index 91f5f82..64f950f 100644
  
  import org.conscrypt.Conscrypt;
  
-@@ -55,10 +59,17 @@ public class MainApplication extends MultiDexApplication implements Configuratio
+@@ -55,10 +60,21 @@ public class MainApplication extends MultiDexApplication implements Configuratio
      }
  
      @Override
@@ -1289,17 +1367,21 @@ index 91f5f82..64f950f 100644
 +        super.onCreate();
 +
 +        // Modern phone carriers commonly use IPv6-only networks with NAT64.
-+        // The TV default forces an IPv4-first resolver and can make every host
-+        // fail with UnknownHostException. Let Android handle DNS on mobile.
++        // Prefer Android system DNS initially, but never overwrite a DNS mode
++        // the user selected to recover from a connection problem.
 +        if (BuildConfig.FLAVOR.equals("stmobile")) {
-+            GlobalPreferences.instance(this).setPreferredDnsType(GlobalPreferences.DNS_TYPE_SYSTEM);
++            SharedPreferences mobilePrefs = getSharedPreferences("smarttube_mobile", MODE_PRIVATE);
++            if (!mobilePrefs.getBoolean("dns_initialized", false)) {
++                GlobalPreferences.instance(this).setPreferredDnsType(GlobalPreferences.DNS_TYPE_SYSTEM);
++                mobilePrefs.edit().putBoolean("dns_initialized", true).apply();
++            }
 +        }
 +
 +        // ByeByeDPI fix
          // https://android-review.googlesource.com/c/platform/external/conscrypt/+/89408/
          // NOTE: Android 10+ (API 29+) uses system Conscrypt TLS; custom Security providers are unnecessary
          // NOTE: May cause 'Unexpected playback error null'
-@@ -75,7 +86,10 @@ public class MainApplication extends MultiDexApplication implements Configuratio
+@@ -75,7 +91,10 @@ public class MainApplication extends MultiDexApplication implements Configuratio
              // UnsatisfiedLinkError
          }
  
@@ -1311,7 +1393,7 @@ index 91f5f82..64f950f 100644
              try {
                  Security.insertProviderAt(conscryptProvider, 1);
              } catch (Throwable e) {
-@@ -103,17 +117,20 @@ public class MainApplication extends MultiDexApplication implements Configuratio
+@@ -103,17 +122,20 @@ public class MainApplication extends MultiDexApplication implements Configuratio
  
          Class<? extends AppDialogActivity> dialogClass = getDialogClass();
  
