@@ -2,8 +2,11 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v11** includes:
+Version **v12** includes:
 
+- Top-aligned thumbnail cropping: portrait and unusually proportioned YouTube
+  images now show their upper portion instead of cutting off faces and headings.
+  Cards retain their existing 16:9 dimensions and rounded corners.
 - YouTube's **normal, personalized Home recommendations**. One batch is
   displayed in YouTube's returned order; subscription uploads and curated
   searches are no longer forcibly mixed into Home. Subscriptions remain in
@@ -42,10 +45,10 @@ an installed production APK.
 ### Seamless Android updates
 
 Android only permits in-place APK updates with the **same signing key**.
-All pre-release versions through v11 were debug-signed, so moving to the first
-production release will require one uninstall/reinstall. Back up anything
-important before that one-time transition. Then a permanent signing key lets
-later releases update the existing app and preserve its data.
+Early development builds were debug-signed. Production versions starting at
+v11 use a permanent signing key. Moving from a debug build to the production
+line requires a one-time uninstall/reinstall. Later signed releases update the
+existing app and preserve its data.
 
 For production releases, create one private Android signing keystore and save
 the signing bundle as **one** GitHub Actions repository secret, named
@@ -74,7 +77,7 @@ never pull-request builds. Production builds fail if signing is missing. All
 other builds are explicitly marked debug/test-only.
 
 To publish an update, merge the new version into `main` **after the signing
-secret is configured**. The push automatically creates a `v11` GitHub release
+secret is configured**. The push automatically creates a `v12` GitHub release
 with a permanently signed APK. A manual GitHub Actions run on `main` with
 `publish_release=true` can also publish if needed. Future versions must
 increment both `MOBILE_VERSION` and the workflow's release version/tag. The
