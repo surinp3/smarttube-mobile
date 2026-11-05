@@ -1,9 +1,9 @@
 diff --git a/MOBILE.md b/MOBILE.md
 new file mode 100644
-index 000000000..aaa7440c8
+index 0000000..1d7733e
 --- /dev/null
 +++ b/MOBILE.md
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,54 @@
 +# SmartTube Mobile fork
 +
 +This fork adds an Android phone build flavor while retaining SmartTube's existing
@@ -26,35 +26,62 @@ index 000000000..aaa7440c8
 +- portrait-first feed with one full-width video card per row
 +- two-column feed in landscape
 +- horizontally scrollable touch section navigation
-+- touch search and account/sign-in buttons
++- native search field and five-item bottom navigation
++- back button and Android Back support
++- synced subscriptions and history when a YouTube account is activated
++- signed-out Home fallback with the original local channels
++- account connection and switching in a touch-friendly Settings page
++- correctly scaled 16:9 thumbnails, improved typography, and duration badges
++- manual in-app GitHub release update check (signed releases required to install over an existing build)
 +- tap to play and long-press for the existing video menu
-+- existing SmartTube playback, sign-in, and settings activities
++- existing SmartTube playback, SponsorBlock, and advanced settings architecture
++
++## Account sync
++
++Settings → YouTube sync → Connect opens YouTube's device activation flow at
++https://yt.be/activate. The app uses SmartTube's existing account/token storage
++and content service; it does not need a separate Google Cloud OAuth client,
++and does not save your credentials in this mobile patch repository.
++
++After account activation, Home and Subscriptions use the account's live YouTube
++subscriptions. History uses SmartTube's logged-in history service and may be
++unavailable if YouTube history is disabled. Signing out returns Home to the
++original local-channel fallback.
++
++## Updates and Android signing
++
++Settings → Check for updates looks for the latest GitHub release tagged v8,
++v9, and so forth, and offers the ARM64 APK download. Replacing an installed
++Android application requires the **same signing key** for every release.
++An APK built with a new debug key cannot update the older v6 debug APK in
++place; a one-time uninstall may be required. Production releases must use
++a securely stored, persistent signing key.
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8d521d439..9d3c7e795 100644
+index 091bb9b..c42757f 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
-@@ -172,6 +172,14 @@ android {
-             minSdkVersion 21
-             targetSdkVersion project.properties.compileSdkVersion
+@@ -177,6 +177,14 @@ android {
+                 abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
+             }
          }
 +        stmobile {
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2426
-+            versionNameSuffix "-mobile.6"
++            versionCode 2460
++            versionNameSuffix "-mobile.7"
 +            matchingFallbacks = ['ststable']
 +        }
      }
  }
  
 diff --git a/smarttubetv/src/main/AndroidManifest.xml b/smarttubetv/src/main/AndroidManifest.xml
-index e40af8cf7..149cf6856 100644
+index 5a290c3..b2916c4 100644
 --- a/smarttubetv/src/main/AndroidManifest.xml
 +++ b/smarttubetv/src/main/AndroidManifest.xml
-@@ -40,7 +40,7 @@
+@@ -42,7 +42,7 @@
          android:required="false" />
      <uses-feature
          android:name="android.software.leanback"
@@ -63,7 +90,7 @@ index e40af8cf7..149cf6856 100644
  
      <!-- android:usesCleartextTraffic - allow HTTP traffic -->
      <!-- Alt cleartext options: https://stackoverflow.com/questions/45940861/android-8-cleartext-http-traffic-not-permitted -->
-@@ -157,6 +157,13 @@
+@@ -170,6 +170,13 @@
              android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|layoutDirection"
              android:screenOrientation="unspecified"/>
  
@@ -77,7 +104,7 @@ index e40af8cf7..149cf6856 100644
          <activity
              android:name="com.liskovsoft.smartyoutubetv2.tv.ui.channel.ChannelActivity"
              android:launchMode="singleInstance"
-@@ -300,4 +307,4 @@
+@@ -313,4 +320,4 @@
          <!-- END Launchers -->
      </application>
  
@@ -86,31 +113,41 @@ index e40af8cf7..149cf6856 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 000000000..876dd9e47
+index 0000000..40c3bdd
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,572 @@
+@@ -0,0 +1,1068 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
++import android.app.AlertDialog;
++import android.content.ClipData;
++import android.content.ClipboardManager;
++import android.content.Context;
++import android.content.Intent;
++import android.net.Uri;
++import android.os.Build;
 +import android.content.res.Configuration;
 +import android.graphics.Color;
 +import android.graphics.Typeface;
++import android.graphics.drawable.GradientDrawable;
 +import android.os.Bundle;
-+import android.os.Handler;
-+import android.os.Looper;
 +import android.text.TextUtils;
 +import android.util.TypedValue;
 +import android.view.Gravity;
 +import android.view.View;
 +import android.view.ViewGroup;
 +import android.widget.Button;
++import android.widget.EditText;
 +import android.widget.FrameLayout;
 +import android.widget.ImageButton;
 +import android.widget.ImageView;
 +import android.widget.LinearLayout;
 +import android.widget.ProgressBar;
++import android.widget.ScrollView;
 +import android.widget.TextView;
 +import android.widget.Toast;
++import android.view.inputmethod.EditorInfo;
++import android.view.inputmethod.InputMethodManager;
 +
 +import androidx.annotation.NonNull;
 +import androidx.recyclerview.widget.GridLayoutManager;
@@ -124,10 +161,11 @@ index 000000000..876dd9e47
 +import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.errors.ErrorFragmentData;
 +import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
-+import com.liskovsoft.smartyoutubetv2.common.app.presenters.SearchPresenter;
-+import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.AccountSettingsPresenter;
 +import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
 +import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
++import com.liskovsoft.mediaserviceinterfaces.SignInService;
++import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
++import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
 +import com.liskovsoft.smartyoutubetv2.tv.R;
 +import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
 +import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions;
@@ -135,6 +173,12 @@ index 000000000..876dd9e47
 +import io.reactivex.disposables.CompositeDisposable;
 +import io.reactivex.Observable;
 +
++import org.json.JSONArray;
++import org.json.JSONObject;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.io.BufferedReader;
++import java.io.InputStreamReader;
 +import java.util.ArrayList;
 +import java.util.LinkedHashMap;
 +import java.util.List;
@@ -149,11 +193,22 @@ index 000000000..876dd9e47
 +    private static final int PRIMARY = Color.WHITE;
 +    private static final int SECONDARY = Color.rgb(170, 170, 170);
 +    private static final int ACCENT = Color.rgb(255, 35, 35);
++    private static final int MOBILE_VERSION = 7;
++    private static final String RELEASES_URL = "https://github.com/surinp3/smarttube-mobile/releases";
++    private static final String RELEASES_API = "https://api.github.com/repos/surinp3/smarttube-mobile/releases/latest";
++    private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
 +
 +    private final Map<Integer, BrowseSection> sections = new LinkedHashMap<>();
-+    private final List<Button> sectionButtons = new ArrayList<>();
++    private final List<Button> navButtons = new ArrayList<>();
 +    private BrowsePresenter presenter;
-+    private LinearLayout sectionBar;
++    private Tab activeTab = Tab.HOME;
++    private boolean settingsDetail;
++    private String lastAccountId;
++    private ScrollView settingsScroll;
++    private LinearLayout searchRow;
++    private EditText searchInput;
++    private LinearLayout emptyPanel;
++    private LinearLayout bottomBar;
 +    private RecyclerView content;
 +    private LinearLayout settingsList;
 +    private GridLayoutManager layoutManager;
@@ -162,20 +217,8 @@ index 000000000..876dd9e47
 +    private TextView title;
 +    private int selectedSection = -1;
 +    private final CompositeDisposable curatedActions = new CompositeDisposable();
++    private final CompositeDisposable signInActions = new CompositeDisposable();
 +    private boolean curatedMode;
-+    private static final String[] LOCAL_CHANNELS = {
-+            "M Bjoernstroem", "Alec Steele", "LegitStreetCars", "FarmCraft101", "M539 Restorations",
-+            "Cutting Edge Engineering Australia", "Pask Makes", "WhistlinDiesel", "Inheritance Machining",
-+            "Watch Wes Work", "Joey Does Tech", "Marius Hornberger", "GreatScott", "Rich Rebuilds",
-+            "Fooster", "Waldos World", "Triggernometry", "Uri Tuchman", "Warren Smith Secret Scholars",
-+            "Max Maker", "Mat Armstrong MK2", "Fabulous Pattaya", "Fresh Spawns", "Integrity Legal Thailand",
-+            "YMH Clips", "Craftsman Chris", "PowerfulJRE", "Flick Connection", "MrBallen",
-+            "Tucker Carlson Network", "DUST", "PBD Podcast", "Asmongold Clips", "JRE Clips",
-+            "DIY Solar Power Will Prowse", "Mighty Car Mods", "Shawn Ryan Show", "Mat Armstrong",
-+            "Call Me Chato", "Vice Grip Garage", "Chase Hughes", "Chris Williamson", "Henrik Jonsson",
-+            "BradenBuildz", "mrnigelng", "Valuetainment Short Clips", "RUDAN BROTHERS", "IGP",
-+            "M539 Plus", "carwow", "Real Civil Engineer", "AvE"
-+    };
 +    private static final String[] LOCAL_CHANNEL_HANDLES = {
 +            "@M.BJOERNSTROEM", "@AlecSteele", "@LegitStreetCars", "@FarmCraft101", "@M539Restorations",
 +            "@CuttingEdgeEngineering", "@PaskMakes", "@whistlindiesel", "@InheritanceMachining", "@WatchWesWork",
@@ -197,7 +240,8 @@ index 000000000..876dd9e47
 +        presenter = BrowsePresenter.instance(this);
 +        presenter.setView(this);
 +        presenter.onViewInitialized();
-+        new Handler(Looper.getMainLooper()).postDelayed(() -> loadCuratedFeed(false), 500);
++        lastAccountId = accountId();
++        loadCuratedFeed(false);
 +    }
 +
 +    @Override
@@ -206,6 +250,15 @@ index 000000000..876dd9e47
 +        if (presenter != null) {
 +            presenter.setView(this);
 +            presenter.onViewResumed();
++        }
++        String current = accountId();
++        if (lastAccountId != null && !lastAccountId.equals(current)) {
++            lastAccountId = current;
++            if (activeTab == Tab.HOME || activeTab == Tab.SUBSCRIPTIONS) {
++                loadCuratedFeed(activeTab == Tab.SUBSCRIPTIONS);
++            } else if (activeTab == Tab.SETTINGS && !settingsDetail) {
++                showSettingsHome();
++            }
 +        }
 +    }
 +
@@ -218,6 +271,7 @@ index 000000000..876dd9e47
 +    @Override
 +    protected void onDestroy() {
 +        curatedActions.clear();
++        signInActions.clear();
 +        super.onDestroy();
 +    }
 +
@@ -225,11 +279,30 @@ index 000000000..876dd9e47
 +    public void onConfigurationChanged(@NonNull Configuration config) {
 +        super.onConfigurationChanged(config);
 +        layoutManager.setSpanCount(columnCount());
++        adapter.notifyDataSetChanged();
++    }
++
++    @Override
++    public void onBackPressed() {
++        if (settingsDetail) {
++            showSettingsHome();
++        } else if (activeTab != Tab.HOME) {
++            loadCuratedFeed(false);
++        } else {
++            super.onBackPressed();
++        }
 +    }
 +
 +    private void buildUi() {
 +        FrameLayout root = new FrameLayout(this);
 +        root.setBackgroundColor(BACKGROUND);
++        // Android 15/16 edge-to-edge draws content under system bars by default.
++        root.setOnApplyWindowInsetsListener((view, insets) -> {
++            view.setPadding(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
++            return insets;
++        });
++        getWindow().setStatusBarColor(BACKGROUND);
++        getWindow().setNavigationBarColor(BACKGROUND);
 +
 +        LinearLayout page = new LinearLayout(this);
 +        page.setOrientation(LinearLayout.VERTICAL);
@@ -237,71 +310,115 @@ index 000000000..876dd9e47
 +
 +        LinearLayout toolbar = new LinearLayout(this);
 +        toolbar.setGravity(Gravity.CENTER_VERTICAL);
-+        toolbar.setPadding(dp(16), dp(8), dp(8), dp(6));
-+        title = text("SmartTube", 22, PRIMARY);
++        toolbar.setPadding(dp(6), dp(4), dp(6), dp(4));
++        toolbar.setBackgroundColor(BACKGROUND);
++        Button back = new Button(this);
++        back.setText("‹");
++        back.setTextSize(32);
++        back.setAllCaps(false);
++        back.setTextColor(PRIMARY);
++        back.setBackgroundColor(Color.TRANSPARENT);
++        back.setContentDescription("Back");
++        back.setOnClickListener(v -> onBackPressed());
++        toolbar.addView(back, new LinearLayout.LayoutParams(dp(42), dp(54)));
++
++        title = text("SmartTube", 20, PRIMARY);
++        title.setGravity(Gravity.CENTER_VERTICAL);
 +        title.setTypeface(Typeface.DEFAULT_BOLD);
-+        title.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_media_play, 0, 0, 0);
-+        title.setCompoundDrawablePadding(dp(8));
-+        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(52), 1));
++        title.setSingleLine(true);
++        title.setEllipsize(TextUtils.TruncateAt.END);
++        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(54), 1));
 +
 +        ImageButton search = new ImageButton(this);
 +        search.setImageResource(android.R.drawable.ic_menu_search);
 +        search.setColorFilter(PRIMARY);
 +        search.setBackgroundColor(Color.TRANSPARENT);
 +        search.setContentDescription("Search");
-+        search.setOnClickListener(v -> SearchPresenter.instance(this).startSearch(null));
-+        toolbar.addView(search, new LinearLayout.LayoutParams(dp(52), dp(52)));
++        search.setOnClickListener(v -> showSearch());
++        toolbar.addView(search, new LinearLayout.LayoutParams(dp(46), dp(54)));
 +
-+        ImageButton account = new ImageButton(this);
-+        account.setImageResource(android.R.drawable.ic_popup_sync);
-+        account.setColorFilter(PRIMARY);
-+        account.setBackgroundColor(Color.TRANSPARENT);
-+        account.setContentDescription("Refresh feed");
-+        account.setOnClickListener(v -> loadCuratedFeed(false));
-+        toolbar.addView(account, new LinearLayout.LayoutParams(dp(52), dp(52)));
++        ImageButton refresh = new ImageButton(this);
++        refresh.setImageResource(android.R.drawable.ic_popup_sync);
++        refresh.setColorFilter(PRIMARY);
++        refresh.setBackgroundColor(Color.TRANSPARENT);
++        refresh.setContentDescription("Refresh current page");
++        refresh.setOnClickListener(v -> refreshCurrentPage());
++        toolbar.addView(refresh, new LinearLayout.LayoutParams(dp(46), dp(54)));
 +        page.addView(toolbar, wrapWidth());
 +
-+        sectionBar = new LinearLayout(this);
-+        sectionBar.setVisibility(View.GONE); // Mobile navigation lives in the fixed bottom bar.
++        searchRow = new LinearLayout(this);
++        searchRow.setPadding(dp(14), dp(2), dp(14), dp(10));
++        searchInput = new EditText(this);
++        searchInput.setSingleLine(true);
++        searchInput.setTextColor(PRIMARY);
++        searchInput.setHintTextColor(SECONDARY);
++        searchInput.setTextSize(16);
++        searchInput.setHint("Search YouTube");
++        searchInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
++        searchInput.setOnEditorActionListener((view, actionId, event) -> {
++            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
++                performSearch(searchInput.getText().toString());
++                return true;
++            }
++            return false;
++        });
++        searchRow.addView(searchInput, new LinearLayout.LayoutParams(0, dp(50), 1));
++        Button searchGo = new Button(this);
++        searchGo.setText("Go");
++        searchGo.setAllCaps(false);
++        searchGo.setOnClickListener(v -> performSearch(searchInput.getText().toString()));
++        searchRow.addView(searchGo, new LinearLayout.LayoutParams(dp(60), dp(50)));
++        searchRow.setVisibility(View.GONE);
++        page.addView(searchRow, wrapWidth());
 +
 +        FrameLayout body = new FrameLayout(this);
 +        page.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 +
 +        content = new RecyclerView(this);
 +        content.setClipToPadding(false);
-+        content.setPadding(dp(10), dp(4), dp(10), dp(90));
++        content.setPadding(dp(10), dp(6), dp(10), dp(10));
 +        layoutManager = new GridLayoutManager(this, columnCount());
 +        content.setLayoutManager(layoutManager);
 +        adapter = new VideoAdapter();
 +        content.setAdapter(adapter);
 +        body.addView(content, match());
 +
-+        android.widget.ScrollView settingsScroll = new android.widget.ScrollView(this);
++        settingsScroll = new ScrollView(this);
 +        settingsScroll.setFillViewport(true);
 +        settingsList = new LinearLayout(this);
 +        settingsList.setOrientation(LinearLayout.VERTICAL);
-+        settingsList.setPadding(dp(12), dp(8), dp(12), dp(96));
++        settingsList.setPadding(dp(16), dp(12), dp(16), dp(30));
 +        settingsScroll.addView(settingsList, wrapWidth());
 +        settingsScroll.setVisibility(View.GONE);
 +        body.addView(settingsScroll, match());
 +
-+        LinearLayout bottomBar = new LinearLayout(this);
++        emptyPanel = new LinearLayout(this);
++        emptyPanel.setOrientation(LinearLayout.VERTICAL);
++        emptyPanel.setGravity(Gravity.CENTER);
++        emptyPanel.setPadding(dp(24), dp(24), dp(24), dp(24));
++        emptyPanel.setVisibility(View.GONE);
++        body.addView(emptyPanel, match());
++
++        bottomBar = new LinearLayout(this);
 +        bottomBar.setGravity(Gravity.CENTER);
 +        bottomBar.setBackgroundColor(Color.rgb(20, 20, 20));
 +        addBottomAction(bottomBar, "Home", android.R.drawable.ic_menu_view, () -> loadCuratedFeed(false));
-+        addBottomAction(bottomBar, "Search", android.R.drawable.ic_menu_search,
-+                () -> SearchPresenter.instance(this).startSearch(null));
-+        addBottomAction(bottomBar, "Subscriptions", android.R.drawable.ic_menu_agenda,
++        addBottomAction(bottomBar, "Subs", android.R.drawable.ic_menu_agenda,
 +                () -> loadCuratedFeed(true));
++        addBottomAction(bottomBar, "History", android.R.drawable.ic_menu_recent_history,
++                () -> loadHistory());
++        addBottomAction(bottomBar, "Search", android.R.drawable.ic_menu_search,
++                () -> showSearch());
 +        addBottomAction(bottomBar, "Settings", android.R.drawable.ic_menu_preferences,
-+                () -> selectSettingsSection());
-+        page.addView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
++                () -> showSettingsHome());
++        page.addView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70)));
 +
 +        progress = new ProgressBar(this);
 +        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER);
 +        root.addView(progress, progressParams);
 +        progress.setVisibility(View.GONE);
 +        setContentView(root);
++        setTab(Tab.HOME, "Home");
 +    }
 +
 +    private int columnCount() {
@@ -327,36 +444,86 @@ index 000000000..876dd9e47
 +    }
 +
 +    private void rebuildSections() {
-+        if (sectionBar.getParent() == null) return;
-+        runOnUiThread(() -> {
-+            sectionBar.removeAllViews();
-+            sectionButtons.clear();
-+            for (BrowseSection section : sections.values()) {
-+                Button button = new Button(this);
-+                button.setText(section.getTitle());
-+                button.setTextSize(14);
-+                button.setAllCaps(false);
-+                button.setTextColor(PRIMARY);
-+                button.setBackgroundColor(section.getId() == selectedSection ? ACCENT : SURFACE);
-+                button.setOnClickListener(v -> selectSectionById(section.getId()));
-+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-+                        ViewGroup.LayoutParams.WRAP_CONTENT, dp(44));
-+                params.setMargins(dp(4), 0, dp(4), 0);
-+                sectionBar.addView(button, params);
-+                sectionButtons.add(button);
-+            }
-+        });
++        // The presenter still tracks sections; the mobile UI has fixed bottom navigation.
++    }
++
++    private SignInService signInService() {
++        return YouTubeServiceManager.instance().getSignInService();
++    }
++
++    private String accountId() {
++        Account account = signInService().getSelectedAccount();
++        return account == null ? "none" : String.valueOf(account.getName()) + "/" + account.getEmail();
++    }
++
++    private void setTab(Tab tab, String pageTitle) {
++        activeTab = tab;
++        title.setText(pageTitle);
++        settingsScroll.setVisibility(tab == Tab.SETTINGS ? View.VISIBLE : View.GONE);
++        content.setVisibility(tab == Tab.SETTINGS ? View.GONE : View.VISIBLE);
++        searchRow.setVisibility(tab == Tab.SEARCH ? View.VISIBLE : View.GONE);
++        emptyPanel.setVisibility(View.GONE);
++        for (int i = 0; i < navButtons.size(); i++) {
++            Button nav = navButtons.get(i);
++            nav.setTextColor(i == tab.ordinal() ? ACCENT : SECONDARY);
++            nav.setAlpha(i == tab.ordinal() ? 1f : 0.85f);
++        }
++    }
++
++    private void refreshCurrentPage() {
++        if (settingsDetail) {
++            selectSettingsSection();
++        } else if (activeTab == Tab.SUBSCRIPTIONS) {
++            loadCuratedFeed(true);
++        } else if (activeTab == Tab.HISTORY) {
++            loadHistory();
++        } else if (activeTab == Tab.SEARCH) {
++            performSearch(searchInput.getText().toString());
++        } else if (activeTab == Tab.SETTINGS) {
++            showSettingsHome();
++        } else {
++            loadCuratedFeed(false);
++        }
++    }
++
++    private void showEmpty(String message, boolean offerSignIn) {
++        emptyPanel.removeAllViews();
++        TextView label = text(message, 16, SECONDARY);
++        label.setGravity(Gravity.CENTER);
++        label.setLineSpacing(dp(3), 1f);
++        emptyPanel.addView(label, wrapWidth());
++        if (offerSignIn) {
++            Button button = new Button(this);
++            button.setText("Connect YouTube account");
++            button.setAllCaps(false);
++            button.setTextColor(PRIMARY);
++            button.setBackgroundColor(ACCENT);
++            button.setOnClickListener(v -> startAccountSignIn());
++            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(52));
++            params.topMargin = dp(18);
++            emptyPanel.addView(button, params);
++        }
++        emptyPanel.setVisibility(View.VISIBLE);
++        progress.setVisibility(View.GONE);
 +    }
 +
 +    private void loadCuratedFeed(boolean subscriptionsOnly) {
 +        curatedMode = true;
++        settingsDetail = false;
 +        curatedActions.clear();
 +        adapter.clear();
 +        settingsList.removeAllViews();
-+        ((View) settingsList.getParent()).setVisibility(View.GONE);
-+        content.setVisibility(View.VISIBLE);
-+        title.setText(subscriptionsOnly ? "Subscriptions" : "Home");
++        setTab(subscriptionsOnly ? Tab.SUBSCRIPTIONS : Tab.HOME,
++                subscriptionsOnly ? "Subscriptions" : "Home");
 +        progress.setVisibility(View.VISIBLE);
++
++        if (signInService().isSigned()) {
++            loadAccountSubscriptions(subscriptionsOnly);
++        } else if (subscriptionsOnly) {
++            showEmpty("Sign in to display your real YouTube subscriptions.\nYour local channels remain available on Home.", true);
++        } else {
++            loadDirectSubscriptionFeeds(false);
++        }
 +
 +        List<String> relatedQueries = new ArrayList<>();
 +        if (!subscriptionsOnly) {
@@ -366,8 +533,92 @@ index 000000000..876dd9e47
 +            relatedQueries.add("solar power DIY technology");
 +        }
 +
-+        loadDirectSubscriptionFeeds(subscriptionsOnly);
 +        for (String query : relatedQueries) loadCuratedQuery(query, false, false);
++    }
++
++    private void loadAccountSubscriptions(boolean subscriptionsOnly) {
++        curatedActions.add(YouTubeServiceManager.instance().getContentService()
++                .getSubscriptionsObserve()
++                .subscribe(group -> {
++                    VideoGroup videos = VideoGroup.from(group);
++                    runOnUiThread(() -> {
++                        if (videos != null && videos.getVideos() != null && !videos.getVideos().isEmpty()) {
++                            emptyPanel.setVisibility(View.GONE);
++                            adapter.appendCurated(videos, Integer.MAX_VALUE, true, subscriptionsOnly, false);
++                        } else if (subscriptionsOnly) {
++                            showEmpty("No subscription videos found. Pull up Settings to check your account.", false);
++                        }
++                        progress.setVisibility(View.GONE);
++                    });
++                }, error -> runOnUiThread(() -> {
++                    progress.setVisibility(View.GONE);
++                    if (subscriptionsOnly) showEmpty("Couldn't load subscriptions. Check your connection and YouTube account.", false);
++                    else Toast.makeText(this, "YouTube subscription sync failed", Toast.LENGTH_LONG).show();
++                })));
++    }
++
++    private void loadHistory() {
++        curatedMode = true;
++        settingsDetail = false;
++        curatedActions.clear();
++        adapter.clear();
++        setTab(Tab.HISTORY, "History");
++        if (!signInService().isSigned()) {
++            showEmpty("Connect your YouTube account to load your watch history.", true);
++            return;
++        }
++        progress.setVisibility(View.VISIBLE);
++        curatedActions.add(YouTubeServiceManager.instance().getContentService().getHistoryObserve()
++                .subscribe(group -> runOnUiThread(() -> {
++                    VideoGroup videos = VideoGroup.from(group);
++                    if (videos != null && videos.getVideos() != null && !videos.getVideos().isEmpty()) {
++                        adapter.apply(videos);
++                    } else {
++                        showEmpty("No watch history available for this account.", false);
++                    }
++                    progress.setVisibility(View.GONE);
++                }), error -> runOnUiThread(() ->
++                        showEmpty("Unable to load history. YouTube history may be disabled for this account.", false))));
++    }
++
++    private void showSearch() {
++        curatedMode = true;
++        settingsDetail = false;
++        curatedActions.clear();
++        adapter.clear();
++        setTab(Tab.SEARCH, "Search");
++        progress.setVisibility(View.GONE);
++        searchInput.requestFocus();
++        ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
++                .showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT);
++    }
++
++    private void performSearch(String rawQuery) {
++        String query = rawQuery.trim();
++        if (query.isEmpty()) return;
++        curatedMode = true;
++        curatedActions.clear();
++        adapter.clear();
++        setTab(Tab.SEARCH, "Results");
++        progress.setVisibility(View.VISIBLE);
++        ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
++                .hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
++        curatedActions.add(YouTubeServiceManager.instance().getContentService()
++                .getSearchObserve(query, SearchOptions.TYPE_VIDEO)
++                .subscribe(groups -> {
++                    for (MediaGroup group : groups) {
++                        VideoGroup videos = VideoGroup.from(group);
++                        if (videos != null && videos.getVideos() != null && !videos.getVideos().isEmpty()) {
++                            runOnUiThread(() -> {
++                                adapter.apply(videos);
++                                emptyPanel.setVisibility(View.GONE);
++                                progress.setVisibility(View.GONE);
++                            });
++                            return;
++                        }
++                    }
++                    runOnUiThread(() -> showEmpty("No matching videos.", false));
++                }, error -> runOnUiThread(() -> showEmpty("Search failed. Check your connection.", false))));
 +    }
 +
 +    private void loadDirectSubscriptionFeeds(boolean subscriptionsOnly) {
@@ -443,26 +694,248 @@ index 000000000..876dd9e47
 +    }
 +
 +    private void selectSettingsSection() {
++        settingsDetail = true;
++        setTab(Tab.SETTINGS, "All settings");
 +        for (BrowseSection section : sections.values()) {
 +            if (section.getType() == BrowseSection.TYPE_SETTINGS_GRID) {
 +                selectSectionById(section.getId());
 +                return;
 +            }
 +        }
++        settingsDetail = false;
 +        Toast.makeText(this, "Settings are not available yet", Toast.LENGTH_SHORT).show();
++        showSettingsHome();
++    }
++
++    private void showSettingsHome() {
++        curatedMode = true;
++        settingsDetail = false;
++        curatedActions.clear();
++        setTab(Tab.SETTINGS, "Settings");
++        progress.setVisibility(View.GONE);
++        settingsList.removeAllViews();
++        addSettingsHeading("YouTube sync");
++        Account current = signInService().getSelectedAccount();
++        if (current == null) {
++            addSettingsRow("Not connected", "Sign in to sync subscriptions and history",
++                    this::startAccountSignIn);
++        } else {
++            String accountName = current.getName() != null ? current.getName() : "YouTube account";
++            addSettingsRow(accountName, "Connected" + (current.getEmail() != null ? " • " + current.getEmail() : ""),
++                    this::chooseAccount);
++            addSettingsRow("Switch account", "Choose a saved YouTube account", this::chooseAccount);
++            addSettingsRow("Add account", "Activate another YouTube account", this::startAccountSignIn);
++            addSettingsRow("Disconnect account", "Remove this account from the app", () -> {
++                new AlertDialog.Builder(this)
++                        .setTitle("Disconnect YouTube?")
++                        .setMessage("This removes the account from SmartTube Mobile, not from Google.")
++                        .setNegativeButton("Cancel", null)
++                        .setPositiveButton("Disconnect", (dialog, which) -> {
++                            signInService().removeAccount(current);
++                            lastAccountId = accountId();
++                            showSettingsHome();
++                        }).show();
++            });
++        }
++        addSettingsHeading("App");
++        addSettingsRow("Check for updates", "Installed: " + BuildConfig.VERSION_NAME,
++                this::checkForUpdates);
++        addSettingsRow("Playback & advanced settings", "Player, SponsorBlock, network and appearance",
++                this::selectSettingsSection);
++        addSettingsRow("About SmartTube Mobile", "Version 7 • Based on SmartTube",
++                () -> new AlertDialog.Builder(this).setTitle("SmartTube Mobile")
++                        .setMessage("Touch-friendly phone edition. Your account stays on this device.\n\n" +
++                                BuildConfig.VERSION_NAME)
++                        .setPositiveButton("OK", null).show());
++        settingsScroll.scrollTo(0, 0);
++    }
++
++    private void addSettingsHeading(String heading) {
++        TextView label = text(heading, 14, ACCENT);
++        label.setTypeface(Typeface.DEFAULT_BOLD);
++        label.setPadding(dp(6), dp(18), dp(6), dp(12));
++        settingsList.addView(label, wrapWidth());
++    }
++
++    private void addSettingsRow(String heading, String description, Runnable action) {
++        LinearLayout row = new LinearLayout(this);
++        row.setOrientation(LinearLayout.HORIZONTAL);
++        row.setGravity(Gravity.CENTER_VERTICAL);
++        row.setBackground(roundBackground(SURFACE, 12));
++        row.setPadding(dp(14), dp(13), dp(12), dp(13));
++        LinearLayout copy = new LinearLayout(this);
++        copy.setOrientation(LinearLayout.VERTICAL);
++        TextView name = text(heading, 16, PRIMARY);
++        name.setTypeface(Typeface.DEFAULT_BOLD);
++        name.setMaxLines(2);
++        name.setLineSpacing(dp(2), 1f);
++        copy.addView(name, wrapWidth());
++        if (!TextUtils.isEmpty(description)) {
++            TextView hint = text(description, 13, SECONDARY);
++            hint.setMaxLines(3);
++            hint.setLineSpacing(dp(2), 1f);
++            copy.addView(hint, wrapWidth());
++        }
++        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
++        TextView arrow = text("›", 25, SECONDARY);
++        arrow.setGravity(Gravity.CENTER);
++        row.addView(arrow, new LinearLayout.LayoutParams(dp(28), dp(44)));
++        row.setOnClickListener(v -> action.run());
++        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
++        params.bottomMargin = dp(8);
++        settingsList.addView(row, params);
++    }
++
++    private GradientDrawable roundBackground(int color, int radiusDp) {
++        GradientDrawable bg = new GradientDrawable();
++        bg.setColor(color);
++        bg.setCornerRadius(dp(radiusDp));
++        return bg;
++    }
++
++    private void chooseAccount() {
++        List<Account> accounts = signInService().getAccounts();
++        if (accounts == null || accounts.isEmpty()) {
++            startAccountSignIn();
++            return;
++        }
++        String[] names = new String[accounts.size()];
++        for (int i = 0; i < accounts.size(); i++) {
++            Account account = accounts.get(i);
++            names[i] = account.getName() != null ? account.getName() : String.valueOf(account.getEmail());
++        }
++        new AlertDialog.Builder(this).setTitle("Select YouTube account")
++                .setItems(names, (dialog, position) -> {
++                    signInService().selectAccount(accounts.get(position));
++                    lastAccountId = accountId();
++                    showSettingsHome();
++                }).setNeutralButton("Add account", (dialog, which) -> startAccountSignIn())
++                .setNegativeButton("Cancel", null).show();
++    }
++
++    private void startAccountSignIn() {
++        signInActions.clear();
++        final String[] activationCode = {""};
++        AlertDialog dialog = new AlertDialog.Builder(this)
++                .setTitle("Connect your YouTube account")
++                .setMessage("Requesting a secure YouTube activation code…")
++                .setNegativeButton("Cancel", (d, which) -> signInActions.clear())
++                .setPositiveButton("Open YouTube", (d, which) -> openUrl("https://yt.be/activate"))
++                .create();
++        dialog.show();
++        signInActions.add(signInService().signInObserve().subscribe(code ->
++                runOnUiThread(() -> {
++                    activationCode[0] = code;
++                    if (dialog.isShowing()) {
++                        dialog.setMessage("Open yt.be/activate and enter this code:\n\n" + code +
++                                "\n\nOnce approved, return to SmartTube Mobile.");
++                        dialog.setButton(AlertDialog.BUTTON_NEUTRAL, "Copy code", (d, which) -> {
++                            ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
++                            clipboard.setPrimaryClip(ClipData.newPlainText("YouTube activation code", activationCode[0]));
++                            Toast.makeText(this, "Code copied", Toast.LENGTH_SHORT).show();
++                        });
++                    }
++                }), error -> runOnUiThread(() -> {
++                    dialog.dismiss();
++                    new AlertDialog.Builder(this).setTitle("Sign-in failed")
++                            .setMessage(error.getMessage() != null ? error.getMessage() : "Please try again.")
++                            .setPositiveButton("OK", null).show();
++                }), () -> runOnUiThread(() -> {
++                    dialog.dismiss();
++                    lastAccountId = accountId();
++                    Toast.makeText(this, "YouTube account connected", Toast.LENGTH_SHORT).show();
++                    loadCuratedFeed(false);
++                })));
++    }
++
++    private void checkForUpdates() {
++        Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show();
++        new Thread(() -> {
++            HttpURLConnection connection = null;
++            try {
++                connection = (HttpURLConnection) new URL(RELEASES_API).openConnection();
++                connection.setConnectTimeout(9000);
++                connection.setReadTimeout(9000);
++                connection.setRequestProperty("Accept", "application/vnd.github+json");
++                connection.setRequestProperty("User-Agent", "SmartTube-Mobile/" + MOBILE_VERSION);
++                int status = connection.getResponseCode();
++                if (status == 404) {
++                    runOnUiThread(() -> updateMessage("No published mobile releases yet",
++                            "The in-app checker is ready; builds must be published as GitHub releases.", RELEASES_URL));
++                    return;
++                }
++                if (status != 200) throw new IllegalStateException("GitHub returned HTTP " + status);
++                StringBuilder body = new StringBuilder();
++                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
++                    String line;
++                    while ((line = reader.readLine()) != null && body.length() < 500_000) body.append(line);
++                }
++                JSONObject release = new JSONObject(body.toString());
++                String tag = release.optString("tag_name", "");
++                java.util.regex.Matcher matcher = java.util.regex.Pattern
++                        .compile("(?i)(?:mobile[-_ ]?)?v?(\\d+)").matcher(tag);
++                if (!matcher.find()) throw new IllegalStateException("Unrecognized release version: " + tag);
++                int latestVersion = Integer.parseInt(matcher.group(1));
++                JSONArray assets = release.optJSONArray("assets");
++                String downloadUrl = null;
++                if (assets != null) {
++                    for (int i = 0; i < assets.length(); i++) {
++                        JSONObject asset = assets.optJSONObject(i);
++                        if (asset == null) continue;
++                        String name = asset.optString("name").toLowerCase();
++                        if (name.endsWith(".apk") && name.contains("arm64")) {
++                            downloadUrl = asset.optString("browser_download_url");
++                            break;
++                        }
++                    }
++                }
++                String releaseUrl = release.optString("html_url", RELEASES_URL);
++                if (!releaseUrl.startsWith(RELEASES_URL)) releaseUrl = RELEASES_URL;
++                final String trustedUrl = downloadUrl != null && downloadUrl.startsWith(RELEASES_URL + "/download/")
++                        ? downloadUrl : releaseUrl;
++                runOnUiThread(() -> {
++                    if (latestVersion > MOBILE_VERSION) {
++                        updateMessage("SmartTube Mobile v" + latestVersion + " is available",
++                                "Download the new signed APK and open it to update.", trustedUrl);
++                    } else {
++                        updateMessage("You're up to date", "Version " + MOBILE_VERSION + " is the latest published mobile release.", null);
++                    }
++                });
++            } catch (Exception error) {
++                runOnUiThread(() -> updateMessage("Update check failed",
++                        "Couldn't reach GitHub releases. Check your connection and try again.", RELEASES_URL));
++            } finally {
++                if (connection != null) connection.disconnect();
++            }
++        }).start();
++    }
++
++    private void updateMessage(String heading, String detail, String url) {
++        AlertDialog.Builder builder = new AlertDialog.Builder(this)
++                .setTitle(heading).setMessage(detail).setNegativeButton("Close", null);
++        if (url != null) builder.setPositiveButton("Open download", (dialog, which) -> openUrl(url));
++        builder.show();
++    }
++
++    private void openUrl(String url) {
++        try {
++            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
++        } catch (Exception error) {
++            Toast.makeText(this, "No browser available to open this link", Toast.LENGTH_LONG).show();
++        }
 +    }
 +
 +    @Override
 +    public void selectSection(int index, boolean focusOnContent) {
 +        if (index < 0 || index >= sections.size()) return;
++        if (curatedMode && !settingsDetail) return;
 +        BrowseSection section = new ArrayList<>(sections.values()).get(index);
 +        curatedMode = false;
 +        selectedSection = section.getId();
 +        title.setText(section.getTitle());
 +        adapter.clear();
 +        content.setVisibility(section.getType() == BrowseSection.TYPE_SETTINGS_GRID ? View.GONE : View.VISIBLE);
-+        ((View) settingsList.getParent()).setVisibility(
-+                section.getType() == BrowseSection.TYPE_SETTINGS_GRID ? View.VISIBLE : View.GONE);
++        settingsScroll.setVisibility(section.getType() == BrowseSection.TYPE_SETTINGS_GRID ? View.VISIBLE : View.GONE);
 +        if (section.getType() != BrowseSection.TYPE_SETTINGS_GRID) settingsList.removeAllViews();
 +        rebuildSections();
 +        presenter.onSectionFocused(section.getId());
@@ -477,42 +950,24 @@ index 000000000..876dd9e47
 +    @Override
 +    public void updateSection(SettingsGroup group) {
 +        runOnUiThread(() -> {
++            if (!settingsDetail) return;
 +            settingsList.removeAllViews();
 +            content.setVisibility(View.GONE);
-+            ((View) settingsList.getParent()).setVisibility(View.VISIBLE);
++            settingsScroll.setVisibility(View.VISIBLE);
 +            if (group == null || group.getItems() == null || group.getItems().isEmpty()) {
 +                TextView empty = text("No settings available", 16, SECONDARY);
 +                settingsList.addView(empty, wrapWidth());
 +                return;
 +            }
 +            for (SettingsItem item : group.getItems()) {
-+                LinearLayout row = new LinearLayout(this);
-+                row.setGravity(Gravity.CENTER_VERTICAL);
-+                row.setPadding(dp(18), dp(12), dp(12), dp(12));
-+                row.setBackgroundColor(SURFACE);
-+
-+                ImageView icon = new ImageView(this);
-+                icon.setImageResource(item.imageResId > 0 ? item.imageResId : android.R.drawable.ic_menu_preferences);
-+                icon.setColorFilter(PRIMARY);
-+                row.addView(icon, new LinearLayout.LayoutParams(dp(34), dp(34)));
-+
-+                TextView label = text(item.title, 16, PRIMARY);
-+                label.setPadding(dp(18), 0, dp(8), 0);
-+                row.addView(label, new LinearLayout.LayoutParams(0, dp(58), 1));
-+                TextView arrow = text("›", 28, SECONDARY);
-+                row.addView(arrow, new LinearLayout.LayoutParams(dp(36), dp(58)));
-+                row.setOnClickListener(v -> { if (item.onClick != null) item.onClick.run(); });
-+
-+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(64));
-+                params.setMargins(0, 0, 0, dp(2));
-+                settingsList.addView(row, params);
++                addSettingsRow(item.title, null, () -> { if (item.onClick != null) item.onClick.run(); });
 +            }
 +        });
 +    }
 +
 +    @Override
 +    public void clearSection(BrowseSection section) {
-+        if (section != null && section.getId() == selectedSection) adapter.clear();
++        if (!curatedMode && section != null && section.getId() == selectedSection) adapter.clear();
 +    }
 +
 +    @Override
@@ -557,6 +1012,10 @@ index 000000000..876dd9e47
 +
 +        void clear() { videos.clear(); subscriptionVideos.clear(); recommendedVideos.clear(); notifyDataSetChanged(); }
 +        void appendCurated(VideoGroup group, int limit, boolean subscription, boolean subscriptionsOnly) {
++            appendCurated(group, limit, subscription, subscriptionsOnly, true);
++        }
++        void appendCurated(VideoGroup group, int limit, boolean subscription, boolean subscriptionsOnly, boolean sortByAge) {
++            if (group == null || group.getVideos() == null) return;
 +            List<Video> target = subscription ? subscriptionVideos : recommendedVideos;
 +            int added = 0;
 +            for (Video video : group.getVideos()) {
@@ -568,7 +1027,7 @@ index 000000000..876dd9e47
 +                if (added >= limit) break;
 +            }
 +            Comparator<Video> newestFirst = (a, b) -> Long.compare(videoAge(a), videoAge(b));
-+            Collections.sort(subscriptionVideos, newestFirst);
++            if (sortByAge) Collections.sort(subscriptionVideos, newestFirst);
 +            Collections.sort(recommendedVideos, newestFirst);
 +            videos.clear();
 +            if (subscriptionsOnly) {
@@ -603,20 +1062,35 @@ index 000000000..876dd9e47
 +        public VideoHolder onCreateViewHolder(@NonNull ViewGroup parent, int type) {
 +            LinearLayout card = new LinearLayout(parent.getContext());
 +            card.setOrientation(LinearLayout.VERTICAL);
-+            card.setPadding(dp(6), dp(6), dp(6), dp(12));
++            card.setPadding(dp(5), dp(5), dp(5), dp(15));
++            FrameLayout thumbnail = new FrameLayout(parent.getContext());
++            thumbnail.setBackground(roundBackground(SURFACE, 10));
++            thumbnail.setClipToOutline(true);
 +            ImageView image = new ImageView(parent.getContext());
 +            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-+            card.addView(image, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(205)));
++            thumbnail.addView(image, new FrameLayout.LayoutParams(-1, -1));
++            TextView duration = text("", 12, PRIMARY);
++            duration.setGravity(Gravity.CENTER);
++            duration.setTypeface(Typeface.DEFAULT_BOLD);
++            duration.setBackground(roundBackground(Color.rgb(15, 15, 15), 5));
++            duration.setPadding(dp(7), dp(3), dp(7), dp(3));
++            FrameLayout.LayoutParams timePosition = new FrameLayout.LayoutParams(-2, -2, Gravity.RIGHT | Gravity.BOTTOM);
++            timePosition.setMargins(dp(8), dp(8), dp(8), dp(8));
++            thumbnail.addView(duration, timePosition);
++            card.addView(thumbnail, new LinearLayout.LayoutParams(-1, thumbnailHeight()));
 +            TextView heading = text("", 16, PRIMARY);
 +            heading.setTypeface(Typeface.DEFAULT_BOLD);
-+            heading.setMaxLines(2);
++            heading.setMaxLines(3);
++            heading.setLineSpacing(dp(2), 1f);
 +            heading.setEllipsize(TextUtils.TruncateAt.END);
++            heading.setPadding(dp(3), dp(9), dp(3), dp(2));
 +            card.addView(heading, wrapWidth());
 +            TextView meta = text("", 13, SECONDARY);
-+            meta.setMaxLines(1);
++            meta.setMaxLines(2);
++            meta.setPadding(dp(3), dp(2), dp(3), dp(2));
 +            meta.setEllipsize(TextUtils.TruncateAt.END);
 +            card.addView(meta, wrapWidth());
-+            return new VideoHolder(card, image, heading, meta);
++            return new VideoHolder(card, thumbnail, image, duration, heading, meta);
 +        }
 +
 +        @Override public void onBindViewHolder(@NonNull VideoHolder holder, int position) { holder.bind(videos.get(position)); }
@@ -624,19 +1098,63 @@ index 000000000..876dd9e47
 +    }
 +
 +    private final class VideoHolder extends RecyclerView.ViewHolder {
++        private final FrameLayout thumbnail;
 +        private final ImageView image;
++        private final TextView duration;
 +        private final TextView heading;
 +        private final TextView meta;
-+        VideoHolder(View item, ImageView image, TextView heading, TextView meta) {
-+            super(item); this.image = image; this.heading = heading; this.meta = meta;
++        VideoHolder(View item, FrameLayout thumbnail, ImageView image, TextView duration, TextView heading, TextView meta) {
++            super(item);
++            this.thumbnail = thumbnail;
++            this.image = image;
++            this.duration = duration;
++            this.heading = heading;
++            this.meta = meta;
 +        }
 +        void bind(Video video) {
++            ViewGroup.LayoutParams thumbnailLayout = thumbnail.getLayoutParams();
++            thumbnailLayout.height = thumbnailHeight();
++            thumbnail.setLayoutParams(thumbnailLayout);
 +            heading.setText(video.title);
-+            meta.setText(video.secondTitle != null ? video.secondTitle : video.author);
++            String detail = video.secondTitle != null ? video.secondTitle.toString() : "";
++            String author = video.getAuthor();
++            if (TextUtils.isEmpty(detail)) {
++                meta.setText(author);
++            } else if (!TextUtils.isEmpty(author) && !detail.contains(author)) {
++                meta.setText(author + "  •  " + detail);
++            } else {
++                meta.setText(detail);
++            }
++            long ms = video.getDurationMs();
++            if (video.isLive) {
++                duration.setText("LIVE");
++                duration.setBackground(roundBackground(ACCENT, 5));
++                duration.setVisibility(View.VISIBLE);
++            } else if (ms > 0) {
++                duration.setText(formatDuration(ms));
++                duration.setBackground(roundBackground(Color.rgb(15, 15, 15), 5));
++                duration.setVisibility(View.VISIBLE);
++            } else {
++                duration.setVisibility(View.GONE);
++            }
 +            Glide.with(image).load(video.cardImageUrl).placeholder(R.drawable.movie).into(image);
 +            itemView.setOnClickListener(v -> presenter.onVideoItemClicked(video));
 +            itemView.setOnLongClickListener(v -> { presenter.onVideoItemLongClicked(video); return true; });
 +        }
++    }
++
++    private int thumbnailHeight() {
++        int width = getResources().getDisplayMetrics().widthPixels / columnCount() - dp(30);
++        return Math.max(dp(140), Math.round(width * 9f / 16f));
++    }
++
++    private static String formatDuration(long durationMs) {
++        long seconds = durationMs / 1000;
++        long hours = seconds / 3600;
++        long minutes = (seconds % 3600) / 60;
++        long remainder = seconds % 60;
++        if (hours > 0) return String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, remainder);
++        return String.format(java.util.Locale.US, "%d:%02d", minutes, remainder);
 +    }
 +
 +    private TextView text(String value, int sp, int color) {
@@ -648,14 +1166,19 @@ index 000000000..876dd9e47
 +    private void addBottomAction(LinearLayout bar, String label, int iconRes, Runnable action) {
 +        Button button = new Button(this);
 +        button.setText(label);
-+        button.setTextSize(11);
-+        button.setTextColor(PRIMARY);
++        button.setTextSize(10);
++        button.setTextColor(SECONDARY);
 +        button.setAllCaps(false);
 +        button.setCompoundDrawablesWithIntrinsicBounds(0, iconRes, 0, 0);
-+        button.setCompoundDrawablePadding(dp(2));
++        button.setCompoundDrawablePadding(dp(5));
 +        button.setBackgroundColor(Color.TRANSPARENT);
++        button.setGravity(Gravity.CENTER);
++        button.setPadding(0, dp(5), 0, dp(5));
++        button.setMinHeight(0);
++        button.setMinimumHeight(0);
 +        button.setOnClickListener(v -> action.run());
-+        bar.addView(button, new LinearLayout.LayoutParams(0, dp(64), 1));
++        navButtons.add(button);
++        bar.addView(button, new LinearLayout.LayoutParams(0, dp(70), 1));
 +    }
 +    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 +    private static ViewGroup.LayoutParams match() { return new ViewGroup.LayoutParams(-1, -1); }
@@ -663,21 +1186,26 @@ index 000000000..876dd9e47
 +    private static LinearLayout.LayoutParams wrapWidth() { return new LinearLayout.LayoutParams(-1, -2); }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-index b3dddad29..b5c4f32ba 100644
+index 91f5f82..64f950f 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/main/MainApplication.java
-@@ -21,7 +21,9 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
- import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
+@@ -8,6 +8,7 @@ import androidx.work.Configuration;
+ 
+ import com.liskovsoft.sharedutils.helpers.Helpers;
+ import com.liskovsoft.sharedutils.helpers.MessageHelpers;
++import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.BrowseSection;
+ import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
+ import com.liskovsoft.smartyoutubetv2.common.app.views.AddDeviceView;
+@@ -24,6 +25,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
  import com.liskovsoft.smartyoutubetv2.common.prefs.NetworkData;
  import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
--import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
-+import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 +import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
-+import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
  import com.liskovsoft.smartyoutubetv2.tv.ui.adddevice.AddDeviceActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.channel.ChannelActivity;
-@@ -31,7 +33,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.dialogs.AppDialogActivityOpaque;
+@@ -33,7 +35,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.dialogs.AppDialogActivityOpaque;
  import com.liskovsoft.smartyoutubetv2.tv.ui.playback.PlaybackActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.search.tags.SearchTagsActivity;
  import com.liskovsoft.smartyoutubetv2.tv.ui.signin.SignInActivity;
@@ -688,7 +1216,7 @@ index b3dddad29..b5c4f32ba 100644
  
  import org.conscrypt.Conscrypt;
  
-@@ -53,10 +57,17 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+@@ -55,10 +59,17 @@ public class MainApplication extends MultiDexApplication implements Configuratio
      }
  
      @Override
@@ -710,7 +1238,7 @@ index b3dddad29..b5c4f32ba 100644
          // https://android-review.googlesource.com/c/platform/external/conscrypt/+/89408/
          // NOTE: Android 10+ (API 29+) uses system Conscrypt TLS; custom Security providers are unnecessary
          // NOTE: May cause 'Unexpected playback error null'
-@@ -73,7 +84,10 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
+@@ -75,7 +86,10 @@ public class MainApplication extends MultiDexApplication implements Configuratio
              // UnsatisfiedLinkError
          }
  
@@ -722,29 +1250,28 @@ index b3dddad29..b5c4f32ba 100644
              try {
                  Security.insertProviderAt(conscryptProvider, 1);
              } catch (Throwable e) {
-@@ -98,17 +112,20 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
-             dialogClazz = AppDialogActivity.class;
-         }
+@@ -103,17 +117,20 @@ public class MainApplication extends MultiDexApplication implements Configuratio
+ 
+         Class<? extends AppDialogActivity> dialogClass = getDialogClass();
  
 -        viewManager.setRoot(BrowseActivity.class);
--        viewManager.register(SplashView.class, SplashActivity.class); // no parent, because it's root activity
++        Class<? extends MotherActivity> browseActivity = BuildConfig.FLAVOR.equals("stmobile") ?
++                MobileBrowseActivity.class : BrowseActivity.class;
++
++        viewManager.setRoot(browseActivity);
+         viewManager.register(SplashView.class, SplashActivity.class); // no parent, because it's root activity
 -        viewManager.register(BrowseView.class, BrowseActivity.class); // no parent, because it's root activity
 -        viewManager.register(PlaybackView.class, PlaybackActivity.class, BrowseActivity.class);
--        viewManager.register(AppDialogView.class, dialogClazz, BrowseActivity.class);
+-        viewManager.register(AppDialogView.class, dialogClass, BrowseActivity.class);
 -        viewManager.register(SearchView.class, SearchTagsActivity.class, BrowseActivity.class);
 -        viewManager.register(SignInView.class, SignInActivity.class, BrowseActivity.class);
 -        viewManager.register(AddDeviceView.class, AddDeviceActivity.class, BrowseActivity.class);
 -        viewManager.register(ChannelView.class, ChannelActivity.class, BrowseActivity.class);
 -        viewManager.register(ChannelUploadsView.class, ChannelUploadsActivity.class, BrowseActivity.class);
 -        viewManager.register(WebBrowserView.class, WebBrowserActivity.class, BrowseActivity.class);
-+        Class<? extends MotherActivity> browseActivity = BuildConfig.FLAVOR.equals("stmobile") ?
-+                MobileBrowseActivity.class : BrowseActivity.class;
-+
-+        viewManager.setRoot(browseActivity);
-+        viewManager.register(SplashView.class, SplashActivity.class); // no parent, because it's root activity
 +        viewManager.register(BrowseView.class, browseActivity); // no parent, because it's root activity
 +        viewManager.register(PlaybackView.class, PlaybackActivity.class, browseActivity);
-+        viewManager.register(AppDialogView.class, dialogClazz, browseActivity);
++        viewManager.register(AppDialogView.class, dialogClass, browseActivity);
 +        viewManager.register(SearchView.class, SearchTagsActivity.class, browseActivity);
 +        viewManager.register(SignInView.class, SignInActivity.class, browseActivity);
 +        viewManager.register(AddDeviceView.class, AddDeviceActivity.class, browseActivity);
@@ -753,14 +1280,14 @@ index b3dddad29..b5c4f32ba 100644
 +        viewManager.register(WebBrowserView.class, WebBrowserActivity.class, browseActivity);
      }
  
-     private void setupGlobalExceptionHandler() {
+     /**
 diff --git a/smarttubetv/src/stmobile/res/values/strings.xml b/smarttubetv/src/stmobile/res/values/strings.xml
 new file mode 100644
-index 000000000..8fe0e88dc
+index 0000000..0dba77b
 --- /dev/null
 +++ b/smarttubetv/src/stmobile/res/values/strings.xml
 @@ -0,0 +1,4 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
-+    <string name="app_name">SmartTube Mobile v6</string>
++    <string name="app_name">SmartTube Mobile v7</string>
 +</resources>
