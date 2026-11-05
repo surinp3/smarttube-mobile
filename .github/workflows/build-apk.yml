@@ -1,9 +1,16 @@
 name: Build SmartTube Mobile APK
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish a signed v11 release for in-app updates'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,12 +23,16 @@ jobs:
       - name: Checkout mobile patch
         uses: actions/checkout@v4
 
-      - name: Fetch official SmartTube
+      - name: Fetch compatible SmartTube source
         run: |
-          git clone --recurse-submodules https://github.com/yuliskov/SmartTube.git upstream
-          cd upstream
-          git apply ../mobile.patch
-          chmod +x gradlew
+          git clone https://github.com/yuliskov/SmartTube.git upstream
+          git -C upstream checkout c8873b539d8463b3276d54e395f94e5cd2bd3198
+          git -C upstream submodule update --init --recursive
+          git -C upstream apply --check ../mobile.patch
+          git -C upstream apply ../mobile.patch
+          git -C upstream/MediaServiceCore apply --check ../../mediaservice.patch
+          git -C upstream/MediaServiceCore apply ../../mediaservice.patch
+          chmod +x upstream/gradlew
 
       - name: Set up Java 11
         uses: actions/setup-java@v4
@@ -30,22 +41,92 @@ jobs:
           java-version: "11"
           cache: gradle
 
-      - name: Build mobile ARM64 debug APK
-        working-directory: upstream
-        run: ./gradlew :smarttubetv:assembleStmobileDebug --stacktrace
+      - name: Default CI artifacts to debug tests
+        run: echo "SIGNED_BUILD=false" >> "$GITHUB_ENV"
 
-      - name: Collect ARM64 APK
+      - name: Configure signing only for a trusted main-branch release
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+        env:
+          MOBILE_SIGNING_BUNDLE_B64: ${{ secrets.MOBILE_SIGNING_BUNDLE_B64 }}
+          MOBILE_KEYSTORE_B64: ${{ secrets.MOBILE_KEYSTORE_B64 }}
+          MOBILE_STORE_PASSWORD: ${{ secrets.MOBILE_STORE_PASSWORD }}
+          MOBILE_KEY_ALIAS: ${{ secrets.MOBILE_KEY_ALIAS }}
+          MOBILE_KEY_PASSWORD: ${{ secrets.MOBILE_KEY_PASSWORD }}
+        run: |
+          umask 077
+          if [ -n "$MOBILE_SIGNING_BUNDLE_B64" ]; then
+            printf '%s' "$MOBILE_SIGNING_BUNDLE_B64" | base64 --decode > signing-bundle.zip
+            unzip -p signing-bundle.zip keystore.properties > upstream/keystore.properties
+            unzip -p signing-bundle.zip smarttubetv/mobile-release.jks > upstream/smarttubetv/mobile-release.jks
+            test -s upstream/keystore.properties
+            test -s upstream/smarttubetv/mobile-release.jks
+            rm signing-bundle.zip
+          elif [ -n "$MOBILE_KEYSTORE_B64" ] && [ -n "$MOBILE_STORE_PASSWORD" ] && [ -n "$MOBILE_KEY_ALIAS" ] && [ -n "$MOBILE_KEY_PASSWORD" ]; then
+            # Also support the original four-secret setup.
+            printf '%s' "$MOBILE_KEYSTORE_B64" | base64 --decode > upstream/smarttubetv/mobile-release.jks
+            {
+              printf 'storeFile=mobile-release.jks\n'
+              printf 'storePassword=%s\n' "$MOBILE_STORE_PASSWORD"
+              printf 'keyAlias=%s\n' "$MOBILE_KEY_ALIAS"
+              printf 'keyPassword=%s\n' "$MOBILE_KEY_PASSWORD"
+            } > upstream/keystore.properties
+          else
+            echo "::error::Production release requires MOBILE_SIGNING_BUNDLE_B64 (or all four legacy signing secrets)."
+            exit 1
+          fi
+          echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
+
+      - name: Build ARM64 APK
+        working-directory: upstream
+        run: |
+          if [ "$SIGNED_BUILD" = "true" ]; then
+            ./gradlew :smarttubetv:assembleStmobileRelease --stacktrace
+          else
+            ./gradlew :smarttubetv:assembleStmobileDebug --stacktrace
+          fi
+
+      - name: Collect APK
         run: |
           mkdir -p output
-          find upstream/smarttubetv/build/outputs/apk -type f -name "*.apk" -print
-          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name "*arm64-v8a.apk" | head -n 1)"
+          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
-          cp "$apk_path" output/SmartTube-Mobile-ARM64.apk
-          file output/SmartTube-Mobile-ARM64.apk
+          if [ "$SIGNED_BUILD" = "true" ]; then
+            cp "$apk_path" output/SmartTube-Mobile-v11-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v11-ARM64-APK" >> "$GITHUB_ENV"
+          else
+            cp "$apk_path" output/SmartTube-Mobile-v11-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v11-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+          fi
+          file output/*.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-Mobile-ARM64-APK
-          path: output/SmartTube-Mobile-ARM64.apk
+          name: ${{ env.APK_ARTIFACT_NAME }}
+          path: output/*.apk
           if-no-files-found: error
+
+  release:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SmartTube-Mobile-v11-ARM64-APK
+          path: output
+      - name: Publish release used by the in-app updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v11 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v11 is already published; increment the mobile version for the next release."
+          else
+            gh release create v11 output/SmartTube-Mobile-v11-ARM64.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "SmartTube Mobile v11" \
+              --notes "Use YouTube's normal personalized Home feed without forcing subscriptions or curated searches into recommendations. Fix Home feed jumps by rendering one result batch in native order. Includes watched-progress indicators, in-app updater, sign-in, history and mobile navigation."
+          fi
