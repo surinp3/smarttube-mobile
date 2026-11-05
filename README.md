@@ -5,7 +5,8 @@ Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov
 Version **v7** adds:
 
 - YouTube account activation using SmartTube's existing sign-in, with live
-  account subscriptions and history in the phone interface.
+  account subscriptions and history in the phone interface, including
+  scrolling through older items.
 - Five-item bottom navigation (Home, Subs, History, Search, Settings), Back
   controls, and native touchscreen search.
 - More legible video cards with 16:9 thumbnails, title/author spacing, and
