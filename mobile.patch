@@ -60,7 +60,7 @@ index 0000000..db6da62
 +
 +The TV build flavors are intentionally unchanged.
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 091bb9b..c7868d7 100644
+index 091bb9b..f0d50ab 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -177,6 +177,14 @@ android {
@@ -71,8 +71,8 @@ index 091bb9b..c7868d7 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2462
-+            versionNameSuffix "-mobile.9"
++            versionCode 2463
++            versionNameSuffix "-mobile.10"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -114,10 +114,10 @@ index 5a290c3..b2916c4 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 0000000..75243e3
+index 0000000..56c296a
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-@@ -0,0 +1,1129 @@
+@@ -0,0 +1,1155 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.ui;
 +
 +import android.app.AlertDialog;
@@ -191,7 +191,7 @@ index 0000000..75243e3
 +    private static final int PRIMARY = Color.WHITE;
 +    private static final int SECONDARY = Color.rgb(170, 170, 170);
 +    private static final int ACCENT = Color.rgb(255, 35, 35);
-+    private static final int MOBILE_VERSION = 9;
++    private static final int MOBILE_VERSION = 10;
 +    private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
 +
 +    private final Map<Integer, BrowseSection> sections = new LinkedHashMap<>();
@@ -252,6 +252,9 @@ index 0000000..75243e3
 +            presenter.setView(this);
 +            presenter.onViewResumed();
 +        }
++        // Playback may have updated a card's local watch percentage while the
++        // phone UI was paused; redraw its progress indicator on return.
++        if (adapter != null) adapter.notifyDataSetChanged();
 +        String current = accountId();
 +        if (lastAccountId != null && !lastAccountId.equals(current)) {
 +            lastAccountId = current;
@@ -793,7 +796,7 @@ index 0000000..75243e3
 +                this::chooseDnsMode);
 +        addSettingsRow("Playback & advanced settings", "Player, SponsorBlock, network and appearance",
 +                this::selectSettingsSection);
-+        addSettingsRow("About SmartTube Mobile", "Version 9 • Based on SmartTube",
++        addSettingsRow("About SmartTube Mobile", "Version 10 • Based on SmartTube",
 +                () -> new AlertDialog.Builder(this).setTitle("SmartTube Mobile")
 +                        .setMessage("Touch-friendly phone edition. Your account stays on this device.\n\n" +
 +                                BuildConfig.VERSION_NAME)
@@ -1139,6 +1142,16 @@ index 0000000..75243e3
 +            FrameLayout.LayoutParams timePosition = new FrameLayout.LayoutParams(-2, -2, Gravity.RIGHT | Gravity.BOTTOM);
 +            timePosition.setMargins(dp(8), dp(8), dp(8), dp(8));
 +            thumbnail.addView(duration, timePosition);
++            // SmartTube already parses YouTube's cross-device
++            // thumbnailOverlayResumePlaybackRenderer.percentDurationWatched.
++            // Show the same red watched-progress line used on YouTube.
++            View watchedTrack = new View(parent.getContext());
++            watchedTrack.setBackgroundColor(Color.argb(210, 48, 48, 48));
++            thumbnail.addView(watchedTrack, new FrameLayout.LayoutParams(-1, dp(4), Gravity.BOTTOM));
++            View watchedFill = new View(parent.getContext());
++            watchedFill.setBackgroundColor(ACCENT);
++            watchedFill.setPivotX(0f);
++            thumbnail.addView(watchedFill, new FrameLayout.LayoutParams(-1, dp(4), Gravity.BOTTOM));
 +            card.addView(thumbnail, new LinearLayout.LayoutParams(-1, thumbnailHeight()));
 +            TextView heading = text("", 16, PRIMARY);
 +            heading.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1152,7 +1165,7 @@ index 0000000..75243e3
 +            meta.setPadding(dp(3), dp(2), dp(3), dp(2));
 +            meta.setEllipsize(TextUtils.TruncateAt.END);
 +            card.addView(meta, wrapWidth());
-+            return new VideoHolder(card, thumbnail, image, duration, heading, meta);
++            return new VideoHolder(card, thumbnail, image, duration, watchedTrack, watchedFill, heading, meta);
 +        }
 +
 +        @Override public void onBindViewHolder(@NonNull VideoHolder holder, int position) { holder.bind(videos.get(position)); }
@@ -1163,13 +1176,18 @@ index 0000000..75243e3
 +        private final FrameLayout thumbnail;
 +        private final ImageView image;
 +        private final TextView duration;
++        private final View watchedTrack;
++        private final View watchedFill;
 +        private final TextView heading;
 +        private final TextView meta;
-+        VideoHolder(View item, FrameLayout thumbnail, ImageView image, TextView duration, TextView heading, TextView meta) {
++        VideoHolder(View item, FrameLayout thumbnail, ImageView image, TextView duration,
++                    View watchedTrack, View watchedFill, TextView heading, TextView meta) {
 +            super(item);
 +            this.thumbnail = thumbnail;
 +            this.image = image;
 +            this.duration = duration;
++            this.watchedTrack = watchedTrack;
++            this.watchedFill = watchedFill;
 +            this.heading = heading;
 +            this.meta = meta;
 +        }
@@ -1198,6 +1216,14 @@ index 0000000..75243e3
 +                duration.setVisibility(View.VISIBLE);
 +            } else {
 +                duration.setVisibility(View.GONE);
++            }
++            float watched = video.percentWatched;
++            boolean hasWatchProgress = !video.isLive && !video.isUpcoming &&
++                    !Float.isNaN(watched) && watched > 0f;
++            watchedTrack.setVisibility(hasWatchProgress ? View.VISIBLE : View.GONE);
++            watchedFill.setVisibility(hasWatchProgress ? View.VISIBLE : View.GONE);
++            if (hasWatchProgress) {
++                watchedFill.setScaleX(Math.min(100f, watched) / 100f);
 +            }
 +            Glide.with(image).load(video.cardImageUrl).placeholder(R.drawable.movie).into(image);
 +            itemView.setOnClickListener(v -> presenter.onVideoItemClicked(video));

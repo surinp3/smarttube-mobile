@@ -2,7 +2,7 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v9** includes:
+Version **v10** includes:
 
 - YouTube account activation using SmartTube's existing sign-in, with live
   account subscriptions and history in the phone interface, including
@@ -11,6 +11,10 @@ Version **v9** includes:
   controls, and native touchscreen search.
 - More legible video cards with 16:9 thumbnails, title/author spacing, and
   duration badges (including LIVE).
+- Red watched-progress lines on video thumbnails. Uses the watched percentage
+  returned by YouTube for the signed-in account (including other devices) and
+  SmartTube's existing local fallback. Existing playback already resumes from
+  the account position when available.
 - Clean account/switching and advanced-settings entry screen.
 - Settings → Check for updates, which downloads the next signed ARM64 APK
   directly inside the app, verifies the package/version and SHA-256 when
@@ -53,7 +57,7 @@ up the release signing key **once**, back it up securely, and use it for every
 future release.
 
 To publish an update, run **Build SmartTube Mobile APK** manually from GitHub
-Actions and select `publish_release=true`. That creates a `v9` GitHub
+Actions and select `publish_release=true`. That creates a `v10` GitHub
 release with the signed APK. Future mobile versions should increment both the
 app's `MOBILE_VERSION` and the workflow's release version/tag.
 
