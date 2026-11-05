@@ -1,9 +1,16 @@
 name: Build SmartTube Mobile APK
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish a signed v7 release for in-app updates'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,12 +23,14 @@ jobs:
       - name: Checkout mobile patch
         uses: actions/checkout@v4
 
-      - name: Fetch official SmartTube
+      - name: Fetch compatible SmartTube source
         run: |
-          git clone --recurse-submodules https://github.com/yuliskov/SmartTube.git upstream
-          cd upstream
-          git apply ../mobile.patch
-          chmod +x gradlew
+          git clone https://github.com/yuliskov/SmartTube.git upstream
+          git -C upstream checkout c8873b539d8463b3276d54e395f94e5cd2bd3198
+          git -C upstream submodule update --init --recursive
+          git -C upstream apply --check ../mobile.patch
+          git -C upstream apply ../mobile.patch
+          chmod +x upstream/gradlew
 
       - name: Set up Java 11
         uses: actions/setup-java@v4
@@ -30,22 +39,73 @@ jobs:
           java-version: "11"
           cache: gradle
 
-      - name: Build mobile ARM64 debug APK
-        working-directory: upstream
-        run: ./gradlew :smarttubetv:assembleStmobileDebug --stacktrace
+      - name: Configure persistent release signing when secrets are present
+        env:
+          MOBILE_KEYSTORE_B64: ${{ secrets.MOBILE_KEYSTORE_B64 }}
+          MOBILE_STORE_PASSWORD: ${{ secrets.MOBILE_STORE_PASSWORD }}
+          MOBILE_KEY_ALIAS: ${{ secrets.MOBILE_KEY_ALIAS }}
+          MOBILE_KEY_PASSWORD: ${{ secrets.MOBILE_KEY_PASSWORD }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          if [ -n "$MOBILE_KEYSTORE_B64" ] && [ -n "$MOBILE_STORE_PASSWORD" ] && [ -n "$MOBILE_KEY_ALIAS" ] && [ -n "$MOBILE_KEY_PASSWORD" ]; then
+            umask 077
+            printf '%s' "$MOBILE_KEYSTORE_B64" | base64 --decode > upstream/smarttubetv/mobile-release.jks
+            {
+              printf 'storeFile=mobile-release.jks\n'
+              printf 'storePassword=%s\n' "$MOBILE_STORE_PASSWORD"
+              printf 'keyAlias=%s\n' "$MOBILE_KEY_ALIAS"
+              printf 'keyPassword=%s\n' "$MOBILE_KEY_PASSWORD"
+            } > upstream/keystore.properties
+            echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
+          else
+            if [ "$PUBLISH_RELEASE" = "true" ]; then
+              echo "::error::A release needs all four mobile signing secrets."
+              exit 1
+            fi
+            echo "SIGNED_BUILD=false" >> "$GITHUB_ENV"
+          fi
 
-      - name: Collect ARM64 APK
+      - name: Build ARM64 APK
+        working-directory: upstream
+        run: |
+          if [ "$SIGNED_BUILD" = "true" ]; then
+            ./gradlew :smarttubetv:assembleStmobileRelease --stacktrace
+          else
+            ./gradlew :smarttubetv:assembleStmobileDebug --stacktrace
+          fi
+
+      - name: Collect APK
         run: |
           mkdir -p output
-          find upstream/smarttubetv/build/outputs/apk -type f -name "*.apk" -print
-          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name "*arm64-v8a.apk" | head -n 1)"
+          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
-          cp "$apk_path" output/SmartTube-Mobile-ARM64.apk
-          file output/SmartTube-Mobile-ARM64.apk
+          cp "$apk_path" output/SmartTube-Mobile-v7-ARM64.apk
+          file output/SmartTube-Mobile-v7-ARM64.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartTube-Mobile-ARM64-APK
-          path: output/SmartTube-Mobile-ARM64.apk
+          name: SmartTube-Mobile-v7-ARM64-APK
+          path: output/SmartTube-Mobile-v7-ARM64.apk
           if-no-files-found: error
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SmartTube-Mobile-v7-ARM64-APK
+          path: output
+      - name: Publish release used by the in-app updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v7 output/SmartTube-Mobile-v7-ARM64.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SmartTube Mobile v7" \
+            --notes "Account-backed subscriptions and history; touch-friendly bottom bar, Back, settings, duration badges and in-app update checking."
