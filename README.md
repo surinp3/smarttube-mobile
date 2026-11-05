@@ -69,15 +69,15 @@ The original **four-secret** signing configuration also remains supported:
 - `MOBILE_KEY_ALIAS`: key alias
 - `MOBILE_KEY_PASSWORD`: key password
 
-The signing secret is read **only when manually publishing a release from the
-`main` branch**, not for pull-request builds. The release workflow fails if
-signing is missing. All other builds are explicitly marked debug/test-only.
+The signing secret is read **only for trusted `main`-branch release builds**,
+never pull-request builds. Production builds fail if signing is missing. All
+other builds are explicitly marked debug/test-only.
 
-To publish an update, first merge the version into `main`. Run **Build SmartTube
-Mobile APK** manually from the `main` branch in GitHub Actions and select
-`publish_release=true`. That creates a `v11` GitHub release with a permanently
-signed APK. Future mobile versions should increment both `MOBILE_VERSION` and
-the workflow's release version/tag. The updater uses the latest published
-release, not Actions artifacts.
+To publish an update, merge the new version into `main` **after the signing
+secret is configured**. The push automatically creates a `v11` GitHub release
+with a permanently signed APK. A manual GitHub Actions run on `main` with
+`publish_release=true` can also publish if needed. Future versions must
+increment both `MOBILE_VERSION` and the workflow's release version/tag. The
+updater uses the latest published release, not Actions artifacts.
 
 Android requires the user to approve installing updates from this source once.

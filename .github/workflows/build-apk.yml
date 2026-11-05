@@ -44,8 +44,8 @@ jobs:
       - name: Default CI artifacts to debug tests
         run: echo "SIGNED_BUILD=false" >> "$GITHUB_ENV"
 
-      - name: Configure signing only for an explicitly published release
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/main'
+      - name: Configure signing only for a trusted main-branch release
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
         env:
           MOBILE_SIGNING_BUNDLE_B64: ${{ secrets.MOBILE_SIGNING_BUNDLE_B64 }}
           MOBILE_KEYSTORE_B64: ${{ secrets.MOBILE_KEYSTORE_B64 }}
@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -122,7 +122,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v11 output/SmartTube-Mobile-v11-ARM64.apk \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "SmartTube Mobile v11" \
-            --notes "Use YouTube's normal personalized Home feed without forcing subscriptions or curated searches into recommendations. Fix Home feed jumps by rendering one result batch in native order. Includes watched-progress indicators, in-app updater, sign-in, history and mobile navigation."
+          if gh release view v11 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v11 is already published; increment the mobile version for the next release."
+          else
+            gh release create v11 output/SmartTube-Mobile-v11-ARM64.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "SmartTube Mobile v11" \
+              --notes "Use YouTube's normal personalized Home feed without forcing subscriptions or curated searches into recommendations. Fix Home feed jumps by rendering one result batch in native order. Includes watched-progress indicators, in-app updater, sign-in, history and mobile navigation."
+          fi
