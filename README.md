@@ -2,7 +2,12 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v12** includes:
+Version **v13** includes:
+
+- **Settings → Home screen → Hide Shorts on Home** (enabled by default).
+  Removes Shorts from YouTube's Home recommendations, including paginated
+  results, while leaving Search, Subscriptions and History unchanged.
+  The preference is saved on the device and can be switched off at any time.
 
 - Top-aligned thumbnail cropping: portrait and unusually proportioned YouTube
   images now show their upper portion instead of cutting off faces and headings.
@@ -77,7 +82,7 @@ never pull-request builds. Production builds fail if signing is missing. All
 other builds are explicitly marked debug/test-only.
 
 To publish an update, merge the new version into `main` **after the signing
-secret is configured**. The push automatically creates a `v12` GitHub release
+secret is configured**. The push automatically creates a `v13` GitHub release
 with a permanently signed APK. A manual GitHub Actions run on `main` with
 `publish_release=true` can also publish if needed. Future versions must
 increment both `MOBILE_VERSION` and the workflow's release version/tag. The
