@@ -114,7 +114,7 @@ index 5a290c3..b2916c4 100644
 +</manifest>
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 new file mode 100644
-index 0000000..052aca7
+index 0000000..ee6b2ce
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 @@ -0,0 +1,1251 @@
@@ -783,7 +783,7 @@ index 0000000..052aca7
 +        }
 +        addSettingsHeading("Home screen");
 +        addSettingsToggle("Hide Shorts on Home", "Keep YouTube Shorts out of Home recommendations",
-+                hideShortsOnHome(), checked -> getSharedPreferences(MOBILE_PREFERENCES, MODE_PRIVATE)
++                hideShortsOnHome(), (button, checked) -> getSharedPreferences(MOBILE_PREFERENCES, MODE_PRIVATE)
 +                        .edit().putBoolean(HIDE_HOME_SHORTS, checked).apply());
 +        addSettingsHeading("App");
 +        addSettingsRow("Check for updates", "Installed: " + BuildConfig.VERSION_NAME,
