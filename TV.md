@@ -13,3 +13,7 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - No claims of zero buffering: actual performance depends on CDN, ISP, YouTube API changes and the attached device. Test on the Google TV Streamer before judging reliability.
 
 The app runs the standard SmartTube TV/remote-control interface; the phone-specific activity only runs in the separate `stmobile` variant. The distinct package ID means the official TV app can remain installed for comparison.
+
+For ongoing protection against YouTube playback changes and for a manual
+signed in-place rollback to a known-good TV release, see
+[Upstream checks and safe rollback](UPDATES_AND_RECOVERY.md).

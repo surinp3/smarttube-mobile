@@ -6,6 +6,7 @@ on:
       - 'tv.patch'
       - 'tv-mediaservice.patch'
       - 'tv_update.json'
+      - 'upstream-pins.json'
       - '.github/workflows/build-tv-apk.yml'
   push:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - 'tv.patch'
       - 'tv-mediaservice.patch'
       - 'tv_update.json'
+      - 'upstream-pins.json'
       - '.github/workflows/build-tv-apk.yml'
   workflow_dispatch:
 
@@ -27,11 +29,19 @@ jobs:
       - name: Checkout TV edition patches
         uses: actions/checkout@v4
 
+      - name: Check original SmartTube video-fetching updates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/check_upstream.py --mode report
+
       - name: Fetch and patch the pinned SmartTube source
         run: |
+          smarttube_pin="$(jq -r '.smarttube.pinned' upstream-pins.json)"
+          mediaservice_pin="$(jq -r '.mediaservice.pinned' upstream-pins.json)"
           git clone https://github.com/yuliskov/SmartTube.git upstream
-          git -C upstream checkout c8873b539d8463b3276d54e395f94e5cd2bd3198
+          git -C upstream checkout "$smarttube_pin"
           git -C upstream submodule update --init --recursive
+          git -C upstream/MediaServiceCore checkout "$mediaservice_pin"
           git -C upstream apply --check ../mobile.patch
           git -C upstream apply ../mobile.patch
           git -C upstream/MediaServiceCore apply --check ../../mediaservice.patch

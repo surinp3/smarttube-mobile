@@ -89,3 +89,16 @@ increment both `MOBILE_VERSION` and the workflow's release version/tag. The
 updater uses the latest published release, not Actions artifacts.
 
 Android requires the user to approve installing updates from this source once.
+
+### Upstream changes and recovery
+
+Every build checks the official SmartTube and MediaServiceCore sources for
+YouTube fetching and playback changes. A scheduled watcher also runs twice a
+day and creates a GitHub issue if the relevant upstream code changes. An
+upstream update is **reviewed**, not blindly merged into the production app.
+
+If an update breaks playback, the GitHub Actions **Restore known-good
+SmartTube release** workflow can publish a *higher-version*, production-signed
+APK rebuilt from the last working source. That installs over the broken app
+without first uninstalling. See [Upstream checks and safe
+rollback](UPDATES_AND_RECOVERY.md) for the exact procedure and limitations.

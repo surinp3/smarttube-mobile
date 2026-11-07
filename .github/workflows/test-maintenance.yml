@@ -1,0 +1,29 @@
+name: Verify SmartTube maintenance tools
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'upstream-pins.json'
+      - '.github/workflows/check-upstream.yml'
+      - '.github/workflows/recovery-release.yml'
+      - '.github/workflows/test-maintenance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'upstream-pins.json'
+      - '.github/workflows/test-maintenance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
