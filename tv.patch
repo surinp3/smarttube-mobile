@@ -1,0 +1,133 @@
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
+index 4369d0d..44c382d 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
+@@ -56,36 +56,20 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
+             disableSubtitles();
+             mVideoLoaderController.reloadVideo();
+         } else if (isOfflineVideo() && !mBufferingDetector.isPlayable()) {
+-            int requiredEngine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP;
+-            int customDns = PlayerTweaksData.DNS_TYPE_GOOGLE;
+-            boolean isCustomEngineEnabled = getPlayerTweaksData().getPlayerDataSource() == requiredEngine;
+-            boolean isCustomDnsEnabled = getPlayerTweaksData().getPreferredDnsType() == customDns;
+-            boolean isCustomDnsActive = isCustomEngineEnabled && isCustomDnsEnabled;
+-            if (!isCustomDnsActive && !getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
+-                // Wrong DNS resolving could cause hanging at start
+-                // Do switch to only engine that respects custom DNS settings
+-                MessageHelpers.showLongMessage(getContext(), "Fixing incorrect DNS resolution. App restart needed...");
+-                getPlayerTweaksData().setPlayerDataSource(requiredEngine);
+-                getPlayerTweaksData().setPreferredDnsType(customDns);
+-                if (!isCustomDnsEnabled) {
+-                    // Restart app to reinit OkHttp internal objects
+-                    Utils.restartTheApp(getContext());
+-                } else {
+-                    mVideoLoaderController.restartEngine();
+-                }
+-            } else {
+-                // Also, some clients like ANDROID_REEL may just hang at start
+-                MessageHelpers.showLongMessage(getContext(), "Fixing stalled client...");
++            // Don't silently replace the viewer's private/system DNS with
++            // Google DNS. YouTube client/CDN selection can stall independently
++            // of DNS, and moving to the next client is reversible.
++            MessageHelpers.showLongMessage(getContext(), "Playback stalled. Trying a different stream...");
++            YouTubeServiceManager.instance().switchNextClientNow();
++            mVideoLoaderController.reloadVideo();
++        } else {
++            // Re-loading the same VOD client can loop forever on a stalled
++            // CDN or SABR stream. Try another client while preserving the
++            // user's chosen playback quality and position.
++            if (isOfflineVideo()) {
++                MessageHelpers.showLongMessage(getContext(), "Playback stalled. Trying a different stream...");
+                 YouTubeServiceManager.instance().switchNextClientNow();
+-                mVideoLoaderController.reloadVideo();
+             }
+-        } else {
+-            // NOTE: The bug. Avoid calling reloadVideo() after lowering the quality.
+-            // This will change current format to 'Disabled'. Do restartEngine() instead.
+-            //lowerVideoQuality();
+-            //mVideoLoaderController.restartEngine();
+-
+-            // SABR may hang if the server issues a high backoffTime
+             mVideoLoaderController.reloadVideo();
+         }
+     }
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
+index 0111d8c..ffe8fc1 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
+@@ -109,8 +109,8 @@ public class ExoPlayerInitializer {
+         // Default values
+         int minBufferMs = 30_000;
+         int maxBufferMs = 30_000;
+-        int bufferForPlaybackMs = 2_500;
+-        int bufferForPlaybackAfterRebufferMs = 5_000;
++        int bufferForPlaybackMs = 3_000;
++        int bufferForPlaybackAfterRebufferMs = 7_000;
+ 
+         switch (mPlayerData.getVideoBufferType()) {
+             case PlayerData.BUFFER_HIGHEST:
+@@ -128,8 +128,12 @@ public class ExoPlayerInitializer {
+                 baseBuilder.setBackBuffer(minBufferMs, true);
+                 break;
+             case PlayerData.BUFFER_MEDIUM:
+-                //minBufferMs = 30_000;
+-                //maxBufferMs = 30_000;
++                // This TV edition trades a little extra RAM for more headroom
++                // when the CDN or Wi-Fi briefly stops delivering segments.
++                // Keep the live/low-buffer profile below unchanged.
++                minBufferMs = 40_000;
++                maxBufferMs = 75_000;
++                baseBuilder.setTargetBufferBytes(Math.min(mMaxBufferBytes, 120_000_000));
+                 break;
+             case PlayerData.BUFFER_LOW:
+                 minBufferMs = 5_000; // LIVE fix
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java
+index 8bb39b8..dd145f9 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java
+@@ -6,7 +6,9 @@ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+ 
+ public class BufferingDetector {
+     private static final long BUFFERING_WINDOW_MS = 60_000;
+-    private static final long BUFFERING_DURATION_MS = 20_000;
++    // Detect persistent stalls before the viewer waits 20 seconds in silence.
++    // Quick Wi-Fi hiccups and normal seeking still resolve on their own.
++    private static final long BUFFERING_DURATION_MS = 12_000;
+     
+     private long mBeginTimeMs;
+     private long mStartTimeMs;
+diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
+index 51c0242..caa704c 100644
+--- a/smarttubetv/build.gradle
++++ b/smarttubetv/build.gradle
+@@ -185,6 +185,14 @@ android {
+             versionNameSuffix "-mobile.13"
+             matchingFallbacks = ['ststable']
+         }
++        stpattv {
++            applicationId "app.smarttube.pattv"
++            minSdkVersion 23
++            targetSdkVersion project.properties.compileSdkVersion
++            versionCode 3001
++            versionNameSuffix "-tv.1"
++            matchingFallbacks = ['ststable']
++        }
+     }
+ }
+ 
+diff --git a/smarttubetv/src/stpattv/res/values/strings.xml b/smarttubetv/src/stpattv/res/values/strings.xml
+new file mode 100644
+index 0000000..4c1c6ab
+--- /dev/null
++++ b/smarttubetv/src/stpattv/res/values/strings.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="app_name" translatable="false">SmartTube Pat TV</string>
++    <string name="browse_title" translatable="false">SmartTube Pat TV</string>
++    <string name="releases_url" translatable="false">https://github.com/surinp3/smarttube-mobile/releases</string>
++    <!-- Our own signed TV releases; never install upstream APKs over this fork. -->
++    <string-array name="update_urls">
++        <item>https://raw.githubusercontent.com/surinp3/smarttube-mobile/main/tv_update.json</item>
++    </string-array>
++</resources>
