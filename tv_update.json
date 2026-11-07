@@ -1,0 +1,17 @@
+{
+  "package": {
+    "downloadUrlList_arm64-v8a": [
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v1/SmartTube-Pat-TV-v1-ARM64.apk"
+    ],
+    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v1/SmartTube-Pat-TV-v1-ARM64.apk"
+  },
+  "32.69-tv.1": {
+    "versionCode": 3001,
+    "changelog": [
+      "First production TV edition for Google TV Streamer (ARM64)",
+      "Prefers a direct-stream YouTube TV client with fallbacks for restricted videos",
+      "Uses a larger video buffer and restarts stalled streams with a different client",
+      "Preserves your DNS settings and supports signed in-app updates"
+    ]
+  }
+}
