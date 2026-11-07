@@ -1,0 +1,19 @@
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java
+index 29e7de1..5549c48 100644
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java
+@@ -31,9 +31,12 @@ public class VideoInfoService extends VideoInfoServiceBase {
+     private final VideoInfoApi mVideoInfoApi;
+     // TODO: TV clients are broken because of recently introduced '-tcl' player variant (different nParam and nSignature)
+     private final static AppClient[] CLIENT_LIST = {
+-            AppClient.TV, // Supports auth. Fixes "please sign in" bug! (the best for Premium users)
++            // The older TV client often supplies direct URLs; prefer it to
++            // SABR when the same video is available through both. All of the
++            // original clients remain available for automatic failover.
++            AppClient.TV_DOWNGRADED, // old Cobalt/Xbox user agents (non-tcl player)
++            AppClient.TV, // TV auth and Premium fallback
+             AppClient.VISIONOS, // no url formats
+-            AppClient.TV_DOWNGRADED, // works with old UAs like old Cobalt and old Xbox (non-tcl players)
+             AppClient.WEB, // Fix video clip blocked in current location
+             AppClient.WEB_EMBED, // Restricted (18+) videos (not working)
+             //AppClient.ANDROID_REEL, // doesn't require pot and cipher (hangs on all engines)
