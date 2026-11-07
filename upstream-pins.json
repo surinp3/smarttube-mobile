@@ -1,0 +1,32 @@
+{
+  "smarttube": {
+    "repo": "yuliskov/SmartTube",
+    "branch": "master",
+    "pinned": "c8873b539d8463b3276d54e395f94e5cd2bd3198",
+    "watch": [
+      "MediaServiceCore",
+      "SharedModules",
+      "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/",
+      "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/",
+      "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java",
+      "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/PlayerData.java",
+      "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/PlayerTweaksData.java",
+      "common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/NetworkData.java",
+      "exoplayer-amzn-2.10.6/library/"
+    ]
+  },
+  "mediaservice": {
+    "repo": "yuliskov/MediaServiceCore",
+    "branch": "master",
+    "pinned": "090dc9b813d4e67e192a7d17ba3dd323157b2335",
+    "watch": [
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/app/",
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/auth/",
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/",
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/formatbuilders/",
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/innertube/",
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/internal/",
+      "youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/"
+    ]
+  }
+}
