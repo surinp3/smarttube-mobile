@@ -83,7 +83,7 @@ jobs:
           fi
           echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
 
-      - name: Build the Google TV ARM64 edition
+      - name: Build all Google TV ARM architectures
         working-directory: upstream
         run: |
           if [ "$SIGNED_BUILD" = 'true' ]; then
@@ -95,14 +95,24 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p output
-          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
-          test -n "$apk_path"
+          # Google TV Streamer has a 64-bit CPU, but some firmware only accepts
+          # 32-bit native app libraries. Supply both ABI splits and a universal.
+          apk_armv7="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*armeabi-v7a.apk' | head -n 1)"
+          apk_arm64="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
+          apk_universal="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*universal.apk' | head -n 1)"
+          test -n "$apk_armv7"
+          test -n "$apk_arm64"
+          test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_path" output/SmartTube-Pat-TV-v1-ARM64.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v1-ARM64-APK' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v2-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v2-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v2-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v2-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Pat-TV-v1-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v1-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v2-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v2-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v2-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v2-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -123,18 +133,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v1-ARM64-APK
+          name: SmartTube-Pat-TV-v2-SIGNED-APKs
           path: output
       - name: Publish production TV release without changing the Mobile latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v1 is already published; increment the TV version for the next release.'
+          if gh release view tv-v2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v2 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v1 output/SmartTube-Pat-TV-v1-ARM64.apk \
+            gh release create tv-v2 \
+              output/SmartTube-Pat-TV-v2-ARMv7.apk \
+              output/SmartTube-Pat-TV-v2-ARM64.apk \
+              output/SmartTube-Pat-TV-v2-Universal.apk \
               --repo "$GITHUB_REPOSITORY" \
-              --title 'SmartTube Pat TV v1 (Google TV)' \
-              --notes 'Signed production release for Google TV ARM64. Separate installation from regular SmartTube and SmartTube Mobile. Prefers direct-stream TV client with fallback, 40–75s VOD buffer, 12s stall recovery with alternate client, and respects user DNS preferences. Check updates from Settings. Not yet tested on the user’s device.' \
+              --title 'SmartTube Pat TV v2 (Google TV Streamer compatible)' \
+              --notes 'Signed production release with ARMv7 (32-bit), ARM64 and Universal APKs. Fixes the NO_MATCHING_ABIS installation error seen on Google TV Streamer. For that box use ARMv7 or Universal. Retains direct-stream failover, 40–75s VOD buffer, 12s stall recovery and preserved DNS preferences. Separate from SmartTube Mobile. Not yet tested on the user’s physical device.' \
               --latest=false
           fi
