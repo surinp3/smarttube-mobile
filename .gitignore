@@ -1,0 +1,5 @@
+vps-sync/.env
+vps-sync/data/
+vps-sync/*.sqlite
+vps-sync/*.sqlite-shm
+vps-sync/*.sqlite-wal

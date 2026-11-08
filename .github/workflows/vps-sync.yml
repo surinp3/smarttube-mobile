@@ -1,0 +1,33 @@
+name: Self-hosted sync service tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-sync/**'
+      - 'bunny-sync/handler.mjs'
+      - 'bunny-sync/schema.sql'
+      - '.github/workflows/vps-sync.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vps-sync/**'
+      - 'bunny-sync/handler.mjs'
+      - 'bunny-sync/schema.sql'
+      - '.github/workflows/vps-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test shared sync API and real HTTP/SQLite persistence
+        run: node --test bunny-sync/tests/*.test.mjs vps-sync/tests/*.test.mjs
+      - name: Verify deployment image builds without secrets
+        run: docker build -f vps-sync/Dockerfile -t smarttube-sync:test .

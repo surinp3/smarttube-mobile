@@ -17,6 +17,12 @@ Version **v14** includes all v13 features, plus:
   **The Bunny backend must be deployed and activated** before sync and Rumble
   search will work. See [Bunny setup](bunny-sync/README.md).
 
+**New self-hosting option:** [VPS sync service](vps-sync/README.md) uses a
+private SQLite database on your own server with the same existing phone/TV
+pairing API. It is staged for deployment, not yet enabled for installed APKs.
+The v14/v3 settings still use legacy Bunny labels until a later signed app
+release; no Bunny account is needed to use the VPS service.
+
 The earlier v13 interface includes:
 
 - **Settings → Home screen → Hide Shorts on Home** (enabled by default).
