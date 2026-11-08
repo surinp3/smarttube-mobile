@@ -99,6 +99,22 @@ jobs:
           fi
           echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
 
+      - name: Fetch verified Gradle distribution through the release API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gradle_zip="$RUNNER_TEMP/gradle-7.5-bin.zip"
+          gradle_sha="cb87f222c5585bd46838ad4db78463a5c5f3d336e5e2b98dc7c0c586527351c2"
+          # Use the release API because the browser download route can return HTTP 504.
+          curl --fail --silent --show-error --location --retry 2 \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/gradle/gradle-distributions/releases/assets/127707999" \
+            -o "$gradle_zip"
+          printf '%s  %s\n' "$gradle_sha" "$gradle_zip" | sha256sum --check --strict
+          wrapper=upstream/gradle/wrapper/gradle-wrapper.properties
+          sed -i "s|^distributionUrl=.*|distributionUrl=file://$gradle_zip|" "$wrapper"
+          printf '\ndistributionSha256Sum=%s\n' "$gradle_sha" >> "$wrapper"
+
       - name: Build all Google TV ARM architectures
         working-directory: upstream
         run: |
