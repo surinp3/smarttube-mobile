@@ -1,4 +1,4 @@
 {
-  "enabled": false,
-  "edgeScriptUrl": ""
+  "enabled": true,
+  "edgeScriptUrl": "https://jobhub.asia"
 }
