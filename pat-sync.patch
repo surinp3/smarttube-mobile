@@ -115,7 +115,7 @@ index 5e3ed0317..ac0298688 100644
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index d633704f3..530eb6632 100644
+index 52499ec2b..c45518b5c 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -216,6 +216,8 @@ dependencies {
@@ -2205,10 +2205,45 @@ index 1b760d311..5822c5fa0 100644
                      removeFromGroup(video);
                  } else {
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java
-index 686ad7b42..b270d1c89 100644
+index 686ad7b42..dd8eba620 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java
-@@ -187,7 +187,7 @@ public class VideoCardPresenter extends LongClickPresenter {
+@@ -23,6 +23,7 @@ import com.liskovsoft.sharedutils.mylogger.Log;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+ import com.liskovsoft.smartyoutubetv2.common.utils.ClickbaitRemover;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleCards;
+ import com.liskovsoft.smartyoutubetv2.tv.R;
+ import com.liskovsoft.smartyoutubetv2.tv.presenter.base.LongClickPresenter;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.browse.video.GridFragmentHelper;
+@@ -85,9 +86,9 @@ public class VideoCardPresenter extends LongClickPresenter {
+         cardView.enableTitle(isTitleEnabled());
+         cardView.enableContent(isContentEnabled());
+         cardView.setBackgroundColor(mDefaultBackgroundColor); // background is temporarily visible during animations
+-        //if (VERSION.SDK_INT >= 23 && MainUIData.instance(context).isUiTweakEnabled(MainUIData.UI_TWEAK_ROUNDED_CORNERS)) {
+-        //    cardView.setForeground(ContextCompat.getDrawable(context, R.drawable.lb_card_outline));
+-        //}
++        if ("app.smarttube.pattv".equals(context.getPackageName())) {
++            cardView.enableTvCardStyle();
++        }
+         updateCardBackgroundColor(cardView, false);
+         return new ViewHolder(cardView);
+     }
+@@ -127,6 +128,13 @@ public class VideoCardPresenter extends LongClickPresenter {
+ 
+         cardView.setTitleText(video.getTitle());
+         cardView.setContentText(video.getSecondTitle());
++        if (video.videoId == null) {
++            cardView.setVideoSourceBadge(0, 0);
++        } else if (PatRumbleCards.isRumble(video)) {
++            cardView.setVideoSourceBadge(R.drawable.pat_video_source_rumble, R.string.pat_video_source_rumble);
++        } else {
++            cardView.setVideoSourceBadge(R.drawable.pat_video_source_youtube, R.string.pat_video_source_youtube);
++        }
+         // Count progress that very close to zero. E.g. when user closed video immediately.
+         cardView.setProgress(video.percentWatched > 0 && video.percentWatched < 1 ? 1 : Math.round(video.percentWatched));
+         cardView.setBadgeText(
+@@ -187,7 +195,7 @@ public class VideoCardPresenter extends LongClickPresenter {
          Glide.with(cardView.getContext().getApplicationContext()).clear(cardView.getMainImageView());
      }
  
@@ -3122,6 +3157,89 @@ index e6e96f1dc..d8fb069e6 100644
          if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_INFO)) {
              adapter.add(mActions.get(R.id.action_info));
          }
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java
+index be2ad5dd4..f98148590 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java
+@@ -1,9 +1,16 @@
+ package com.liskovsoft.smartyoutubetv2.tv.ui.widgets.complexcardview;
+ 
+ import android.content.Context;
++import android.graphics.Canvas;
++import android.graphics.Path;
++import android.graphics.Rect;
++import android.graphics.RectF;
++import android.graphics.drawable.Drawable;
+ import android.os.Handler;
+ import android.os.Looper;
+ import android.util.AttributeSet;
++import android.view.View;
++import android.widget.ImageView;
+ import android.widget.ImageView.ScaleType;
+ import android.widget.TextView;
+ import androidx.leanback.widget.ImageCardView;
+@@ -17,6 +24,9 @@ public class ComplexImageCardView extends ImageCardView {
+     private Handler mHandler;
+     private boolean mIsCardTextAutoScrollEnabled;
+     private boolean mIsBadgeEnabled;
++    private ImageView mSourceBadge;
++    private Drawable mTvFocusFrame;
++    private final Path mTvCardClip = new Path();
+ 
+     public ComplexImageCardView(Context context) {
+         super(context);
+@@ -41,6 +51,51 @@ public class ComplexImageCardView extends ImageCardView {
+         mHandler = new Handler(Looper.getMainLooper());
+     }
+ 
++    public void enableTvCardStyle() {
++        setWillNotDraw(false);
++        setCardType(CARD_TYPE_INFO_UNDER);
++        setInfoVisibility(CARD_REGION_VISIBLE_ALWAYS);
++        mSourceBadge = findViewById(R.id.pat_video_source_badge);
++        mTvFocusFrame = getContext().getDrawable(R.drawable.pat_video_focus_frame);
++    }
++
++    public void setVideoSourceBadge(int icon, int label) {
++        if (mSourceBadge == null) return;
++        mSourceBadge.setImageResource(icon);
++        mSourceBadge.setContentDescription(label == 0 ? null : getResources().getString(label));
++        mSourceBadge.setVisibility(icon == 0 ? GONE : VISIBLE);
++    }
++
++    @Override
++    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
++        super.onSizeChanged(width, height, oldWidth, oldHeight);
++        if (mTvFocusFrame == null) return;
++        float radius = getResources().getDimension(R.dimen.pat_video_card_radius);
++        mTvCardClip.reset();
++        mTvCardClip.addRoundRect(new RectF(0, 0, width, height), radius, radius, Path.Direction.CW);
++        mTvFocusFrame.setBounds(0, 0, width, height);
++    }
++
++    @Override
++    public void draw(Canvas canvas) {
++        if (mTvFocusFrame == null) {
++            super.draw(canvas);
++            return;
++        }
++        // Leanback can replace the view's outline and foreground when it attaches a card.
++        int saveCount = canvas.save();
++        canvas.clipPath(mTvCardClip);
++        super.draw(canvas);
++        if (isFocused()) mTvFocusFrame.draw(canvas);
++        canvas.restoreToCount(saveCount);
++    }
++
++    @Override
++    protected void onFocusChanged(boolean focused, int direction, Rect previous) {
++        super.onFocusChanged(focused, direction, previous);
++        if (mTvFocusFrame != null) invalidate();
++    }
++
+     private void enableTitleAnimation(boolean enable) {
+         enableTextAnimation(findViewById(R.id.title_text), enable);
+     }
 diff --git a/smarttubetv/src/main/res/drawable/action_follow_rumble.xml b/smarttubetv/src/main/res/drawable/action_follow_rumble.xml
 new file mode 100644
 index 000000000..969614184
@@ -3135,12 +3253,88 @@ index 000000000..969614184
 +    <path android:fillColor="#FFFFFFFF"
 +        android:pathData="M3,4.8 L14.5,12 L3,19.2 Z M18,7 H20 V11 H24 V13 H20 V17 H18 V13 H14 V11 H18 Z" />
 +</vector>
+diff --git a/smarttubetv/src/main/res/drawable/pat_video_focus_frame.xml b/smarttubetv/src/main/res/drawable/pat_video_focus_frame.xml
+new file mode 100644
+index 000000000..da7a17c48
+--- /dev/null
++++ b/smarttubetv/src/main/res/drawable/pat_video_focus_frame.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item>
++        <shape android:shape="rectangle">
++            <corners android:radius="@dimen/pat_video_card_radius" />
++            <solid android:color="@android:color/transparent" />
++            <stroke android:width="6dp" android:color="#101010" />
++        </shape>
++    </item>
++    <item android:left="1dp" android:top="1dp" android:right="1dp" android:bottom="1dp">
++        <shape android:shape="rectangle">
++            <corners android:radius="11dp" />
++            <solid android:color="@android:color/transparent" />
++            <stroke android:width="4dp" android:color="#FFFFFF" />
++        </shape>
++    </item>
++</layer-list>
+diff --git a/smarttubetv/src/main/res/drawable/pat_video_source_rumble.xml b/smarttubetv/src/main/res/drawable/pat_video_source_rumble.xml
+new file mode 100644
+index 000000000..0d7bef3bb
+--- /dev/null
++++ b/smarttubetv/src/main/res/drawable/pat_video_source_rumble.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="30dp" android:height="22dp"
++    android:viewportWidth="30" android:viewportHeight="22">
++    <path android:fillColor="#101010"
++        android:pathData="M5,0 H25 Q30,0 30,5 V17 Q30,22 25,22 H5 Q0,22 0,17 V5 Q0,0 5,0 Z" />
++    <path android:fillColor="#85ED3C" android:fillType="evenOdd"
++        android:pathData="M9,6 Q9,2.8 12.2,3.6 Q17.2,4.6 22,8.2 Q25.4,10.9 22,13.8 Q17.2,17.4 12.2,18.4 Q9,19.2 9,16 Z M12,7.4 L12,14.6 Q12,15.6 13,15.2 Q17.7,13.7 20,11.5 Q20.6,11 20,10.5 Q17.7,8.3 13,6.8 Q12,6.4 12,7.4 Z" />
++</vector>
+diff --git a/smarttubetv/src/main/res/drawable/pat_video_source_youtube.xml b/smarttubetv/src/main/res/drawable/pat_video_source_youtube.xml
+new file mode 100644
+index 000000000..5bb379ffb
+--- /dev/null
++++ b/smarttubetv/src/main/res/drawable/pat_video_source_youtube.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="30dp" android:height="22dp"
++    android:viewportWidth="30" android:viewportHeight="22">
++    <path android:fillColor="#101010"
++        android:pathData="M5,0 H25 Q30,0 30,5 V17 Q30,22 25,22 H5 Q0,22 0,17 V5 Q0,0 5,0 Z" />
++    <path android:fillColor="#FF0033"
++        android:pathData="M7,4 H23 Q26,4 26,7 V15 Q26,18 23,18 H7 Q4,18 4,15 V7 Q4,4 7,4 Z" />
++    <path android:fillColor="#FFFFFF" android:pathData="M13,7 L19,11 L13,15 Z" />
++</vector>
+diff --git a/smarttubetv/src/main/res/layout/text_badge_image_view.xml b/smarttubetv/src/main/res/layout/text_badge_image_view.xml
+index 4e20e2318..de61a11a0 100644
+--- a/smarttubetv/src/main/res/layout/text_badge_image_view.xml
++++ b/smarttubetv/src/main/res/layout/text_badge_image_view.xml
+@@ -17,6 +17,17 @@
+         android:id="@+id/preview_container"
+         android:layout_width="wrap_content"
+         android:layout_height="wrap_content" />
++    <ImageView
++        android:id="@+id/pat_video_source_badge"
++        android:layout_width="30dp"
++        android:layout_height="22dp"
++        android:layout_alignParentTop="true"
++        android:layout_alignParentRight="true"
++        android:layout_marginTop="8dp"
++        android:layout_marginRight="8dp"
++        android:scaleType="fitCenter"
++        android:visibility="gone"
++        tools:ignore="ContentDescription,RtlHardcoded" />
+     <LinearLayout
+                     android:id="@+id/clip_info"
+                     android:layout_width="match_parent"
 diff --git a/smarttubetv/src/main/res/values/pat_rumble_follow.xml b/smarttubetv/src/main/res/values/pat_rumble_follow.xml
 new file mode 100644
-index 000000000..ff1550c80
+index 000000000..697fa7568
 --- /dev/null
 +++ b/smarttubetv/src/main/res/values/pat_rumble_follow.xml
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,17 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <item name="action_follow_rumble" type="id" />
@@ -3154,4 +3348,7 @@ index 000000000..ff1550c80
 +    <string name="pat_rumble_follow_result">%1$s\n%2$s</string>
 +    <string name="pat_rumble_follow_saved">Following %1$s in SmartTube</string>
 +    <string name="pat_recent_from_your_channels">Recent from your channels</string>
++    <dimen name="pat_video_card_radius">12dp</dimen>
++    <string name="pat_video_source_youtube" translatable="false">YouTube</string>
++    <string name="pat_video_source_rumble" translatable="false">Rumble</string>
 +</resources>

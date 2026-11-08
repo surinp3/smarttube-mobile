@@ -8,7 +8,7 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - Larger 40–75 second buffer for the medium-buffer profile, 3-second start and 7-second rebuffer target. Low-buffer mode remains available for low-latency live viewing.
 - After 12 seconds of cumulative buffering within a minute, TV VOD playback tries another client rather than blindly reloading the same one. SABR reload-token fixes from the pinned upstream revision remain in place.
 - Never silently changes a user's DNS preference to Google DNS during stall recovery.
-- Separate signed `tv-v8` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- Separate signed `tv-v9` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
 - **Follow on Rumble** in the YouTube player controls looks up the creator.
   Choose a channel to save it to your synced SmartTube follows.
 - The main sidebar opens **YouTube**, **Rumble** or **Both**. **Both** mixes
@@ -17,6 +17,7 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - Home uses the same mixed categories in a vertical grid. It starts with
   **Recent from your channels**, mixing YouTube subscriptions and Rumble videos
   by upload date. Rumble cards show the channel name and upload date when available.
+- Video cards show rounded corners, a focus frame, a source icon and a title below the thumbnail.
 - **Settings → Rumble + Bunny sync** opens the shared browser and pairing controls.
   Enter the TV's 10-digit code in the mobile app to connect it to the hosted
   sync service.
