@@ -2218,7 +2218,7 @@ index 1b760d311..5822c5fa0 100644
                      removeFromGroup(video);
                  } else {
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
-index 648aa8d42..5e92e9736 100644
+index 648aa8d42..86e542452 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 @@ -7,6 +7,7 @@ import android.os.Looper;
@@ -2229,15 +2229,16 @@ index 648aa8d42..5e92e9736 100644
  
  import androidx.annotation.NonNull;
  import androidx.core.content.ContextCompat;
-@@ -22,6 +23,7 @@ import androidx.leanback.widget.Presenter;
+@@ -22,6 +23,8 @@ import androidx.leanback.widget.Presenter;
  import androidx.leanback.widget.PresenterSelector;
  import androidx.leanback.widget.TitleHelper;
  import com.liskovsoft.sharedutils.helpers.Helpers;
++import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
 +import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.BrowseSection;
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsGroup;
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
-@@ -33,15 +35,25 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
+@@ -33,15 +36,25 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
  import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
  import com.liskovsoft.smartyoutubetv2.common.misc.CrashRestorer;
  import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
@@ -2263,7 +2264,7 @@ index 648aa8d42..5e92e9736 100644
  /*
   * Main class to show BrowseFragment with header and rows of videos
   */
-@@ -56,6 +68,10 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -56,6 +69,10 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      private boolean mIsFragmentCreated;
      private boolean mFocusOnContent;
      private CrashRestorer mCrashRestorer;
@@ -2274,7 +2275,7 @@ index 648aa8d42..5e92e9736 100644
  
      @Override
      public void onCreate(Bundle savedInstanceState) {
-@@ -66,6 +82,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -66,6 +83,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
          }
          
          mCrashRestorer = new CrashRestorer(getContext(), savedInstanceState);
@@ -2284,7 +2285,7 @@ index 648aa8d42..5e92e9736 100644
          mIsFragmentCreated = true;
  
          mSections = new HashMap<>();
-@@ -236,7 +255,7 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -236,7 +256,7 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      }
  
      private int getSelectedHeaderId() {
@@ -2293,7 +2294,7 @@ index 648aa8d42..5e92e9736 100644
              return -1;
          }
  
-@@ -309,12 +328,92 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -309,12 +329,92 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      @Override
      public void updateSection(VideoGroup group) {
          restoreMainFragment();
@@ -2344,7 +2345,7 @@ index 648aa8d42..5e92e9736 100644
 +    }
 +
 +    private void loadRecentYouTube(BrowseSection section, Fragment rows, int request, boolean mixed) {
-+        YouTubeServiceManager youtube = YouTubeServiceManager.instance();
++        ServiceManager youtube = YouTubeServiceManager.instance();
 +        if (!youtube.getSignInService().isSigned()) {
 +            updateRecentWithRumble(section, rows, request, mixed, Collections.emptyList());
 +            return;
@@ -2387,7 +2388,7 @@ index 648aa8d42..5e92e9736 100644
      @Override
      public void updateSection(SettingsGroup group) {
          restoreMainFragment();
-@@ -441,6 +540,8 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -441,6 +541,8 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
  
      @Override
      public void onDestroyView() {
@@ -2396,7 +2397,7 @@ index 648aa8d42..5e92e9736 100644
          mSectionFragmentFactory.cleanup();
  
          super.onDestroyView();
-@@ -470,6 +571,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -470,6 +572,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
          }
  
          mIsFragmentCreated = false;
