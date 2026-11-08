@@ -1,3 +1,15 @@
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/Video.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/Video.java
+index d4271e21a..7fb578c16 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/Video.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/Video.java
+@@ -80,6 +80,7 @@ public final class Video {
+     public int groupPosition = -1; // group position in multi-grid fragments
+     public String clickTrackingParams;
+     public boolean isSynced;
++    public long publishedAtMs;
+     public final long timestamp = System.currentTimeMillis();
+     public int sectionId = -1;
+     public String channelGroupId;
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
 index 8d81a5a9d..daa552b99 100644
 --- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
@@ -125,7 +137,7 @@ index 5e3ed0317..ac0298688 100644
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 8af36837e..131c2ad92 100644
+index de8b3359c..f82c07cfc 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -216,6 +216,8 @@ dependencies {
@@ -758,17 +770,123 @@ index 000000000..b40d7b006
 +        @Override public int getItemCount() { return visible.size(); }
 +    }
 +}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRecentUploads.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRecentUploads.java
+new file mode 100644
+index 000000000..fc802d51e
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRecentUploads.java
+@@ -0,0 +1,99 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
++
++import java.text.ParsePosition;
++import java.text.SimpleDateFormat;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Date;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Locale;
++import java.util.Set;
++import java.util.TimeZone;
++import java.util.concurrent.TimeUnit;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++public final class PatRecentUploads {
++    private static final Pattern ISO_DATE = Pattern.compile(
++            "^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.(\\d+))?(Z|[+-]\\d{2}:?\\d{2})?)?$");
++    private static final Pattern AGE = Pattern.compile(
++            "(?i)\\b(\\d{1,6}|a|an|one)\\s+(second|minute|hour|day|week|month|year)s? ago\\b");
++
++    private PatRecentUploads() { }
++
++    public static List<Video> merge(List<Video> youtube, List<Video> rumble) {
++        long now = System.currentTimeMillis();
++        Set<String> seen = new HashSet<>();
++        List<Upload> uploads = new ArrayList<>();
++        for (Video video : youtube) {
++            if (video.videoId == null || video.isUpcoming || !seen.add(video.videoId)) continue;
++            uploads.add(new Upload(video, youtubeDate(video, now)));
++        }
++        for (Video video : rumble) {
++            if (!seen.add(video.videoId)) continue;
++            uploads.add(new Upload(video, video.publishedAtMs));
++        }
++        // Keep provider order for equal dates and for entries without a usable date.
++        Collections.sort(uploads, (first, second) -> Long.compare(second.date, first.date));
++        List<Video> result = new ArrayList<>(uploads.size());
++        for (Upload upload : uploads) result.add(upload.video);
++        return result;
++    }
++
++    private static long youtubeDate(Video video, long now) {
++        if (video.mediaItem == null) return 0;
++        long exactDate = video.mediaItem.getPublishedDate();
++        if (exactDate > 0) return exactDate;
++        String text = video.mediaItem.getProductionDate();
++        if (text == null) return 0;
++        long parsed = parseDate(text);
++        if (parsed > 0) return parsed;
++        Matcher age = AGE.matcher(text);
++        if (!age.find()) return 0;
++        String amount = age.group(1);
++        long count = Character.isDigit(amount.charAt(0)) ? Long.parseLong(amount) : 1;
++        long days;
++        switch (age.group(2).toLowerCase(Locale.ROOT)) {
++            case "second": return now - TimeUnit.SECONDS.toMillis(count);
++            case "minute": return now - TimeUnit.MINUTES.toMillis(count);
++            case "hour": return now - TimeUnit.HOURS.toMillis(count);
++            case "day": days = count; break;
++            case "week": days = count * 7; break;
++            case "month": days = count * 30; break;
++            default: days = count * 365; break;
++        }
++        return Math.max(0, now - TimeUnit.DAYS.toMillis(days));
++    }
++
++    static long parseDate(String text) {
++        if (text == null) return 0;
++        Matcher date = ISO_DATE.matcher(text);
++        if (!date.matches()) return 0;
++        String pattern = "yyyy-MM-dd";
++        if (text.length() > 10) {
++            pattern += "'T'HH:mm:ssZ";
++            String zone = date.group(2);
++            text = text.substring(0, 19) + (zone == null || "Z".equals(zone) ? "+0000" : zone.replace(":", ""));
++        }
++        SimpleDateFormat formatter = new SimpleDateFormat(pattern, Locale.US);
++        formatter.setTimeZone(TimeZone.getTimeZone("UTC"));
++        formatter.setLenient(false);
++        Date parsed = formatter.parse(text, new ParsePosition(0));
++        if (parsed == null) return 0;
++        String fraction = date.group(1);
++        return parsed.getTime() + (fraction == null ? 0 : Integer.parseInt((fraction + "00").substring(0, 3)));
++    }
++
++    private static final class Upload {
++        final Video video;
++        final long date;
++
++        Upload(Video video, long date) {
++            this.video = video;
++            this.date = date;
++        }
++    }
++}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
 new file mode 100644
-index 000000000..b8e99bc43
+index 000000000..f261e934c
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,57 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.content.Context;
 +import android.content.Intent;
 +
++import com.liskovsoft.sharedutils.helpers.DateHelper;
 +import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 +
 +import org.json.JSONArray;
@@ -794,9 +912,13 @@ index 000000000..b8e99bc43
 +            Video card = new Video();
 +            card.videoId = PREFIX + id;
 +            card.title = item.optString("title");
-+            card.author = item.optString("channelName", "Rumble");
++            String channel = item.optString("channelName").trim();
++            card.author = channel.isEmpty() ? "Rumble" : channel;
 +            card.cardImageUrl = item.optString("thumbnail");
-+            card.secondTitle = "Rumble";
++            card.publishedAtMs = PatRecentUploads.parseDate(item.optString("publishedAt"));
++            String subtitle = channel.isEmpty() ? "Rumble" : channel + " • Rumble";
++            if (card.publishedAtMs > 0) subtitle += " • " + DateHelper.toShortDate(card.publishedAtMs, true, false, false);
++            card.secondTitle = subtitle;
 +            card.isLive = item.optBoolean("live", false);
 +            card.description = item.toString();
 +            long duration = item.optLong("durationMs", 0);
@@ -1218,10 +1340,10 @@ index 000000000..ff290908f
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
 new file mode 100644
-index 000000000..e88249a81
+index 000000000..01100701f
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
-@@ -0,0 +1,500 @@
+@@ -0,0 +1,511 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.content.Context;
@@ -1668,11 +1790,15 @@ index 000000000..e88249a81
 +    }
 +
 +    public void rumbleHome(Callback done) {
++        rumbleHome(true, done);
++    }
++
++    public void rumbleHome(boolean includeLive, Callback done) {
 +        enqueue(() -> {
 +            String token = prefs.getString("token", "");
 +            if (token.isEmpty()) return new Result(401, null, "Connect this device in Rumble sync settings");
 +            JSONArray channels = followedChannels();
-+            if (channels.length() == 0) return request("/v1/rumble/live", "GET", null, token);
++            if (channels.length() == 0 && includeLive) return request("/v1/rumble/live", "GET", null, token);
 +
 +            JSONArray videos = new JSONArray();
 +            Set<String> seen = new HashSet<>();
@@ -1699,7 +1825,14 @@ index 000000000..e88249a81
 +                if (items == null) continue;
 +                for (int j = 0; j < items.length(); j++) {
 +                    JSONObject item = items.optJSONObject(j);
-+                    if (item != null && seen.add(item.optString("id"))) videos.put(item);
++                    if (item != null && seen.add(item.optString("id"))) {
++                        if (item.optString("channelName").isEmpty()) {
++                            JSONObject profile = feed.data.optJSONObject("channel");
++                            String name = profile == null ? "" : profile.optString("name");
++                            item.put("channelName", name.isEmpty() ? channel.optString("name") : name);
++                        }
++                        videos.put(item);
++                    }
 +                }
 +            }
 +            return videos.length() == 0 && failure != null ? failure :
@@ -2085,7 +2218,7 @@ index 1b760d311..5822c5fa0 100644
                      removeFromGroup(video);
                  } else {
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
-index 648aa8d42..abe834fb9 100644
+index 648aa8d42..5e92e9736 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 @@ -7,6 +7,7 @@ import android.os.Looper;
@@ -2104,10 +2237,11 @@ index 648aa8d42..abe834fb9 100644
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.BrowseSection;
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsGroup;
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
-@@ -33,13 +35,17 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
+@@ -33,15 +35,25 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
  import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
  import com.liskovsoft.smartyoutubetv2.common.misc.CrashRestorer;
  import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRecentUploads;
 +import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleCards;
 +import com.liskovsoft.smartyoutubetv2.mobile.sync.PatSyncClient;
  import com.liskovsoft.smartyoutubetv2.tv.R;
@@ -2117,22 +2251,30 @@ index 648aa8d42..abe834fb9 100644
  import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.headers.ExtendedHeadersSupportFragment;
  import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.misc.ProgressBarManager;
  
++import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
++
++import java.util.Collections;
  import java.util.HashMap;
 +import java.util.List;
  import java.util.Map;
  
++import io.reactivex.disposables.Disposable;
++
  /*
-@@ -56,6 +62,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+  * Main class to show BrowseFragment with header and rows of videos
+  */
+@@ -56,6 +68,10 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      private boolean mIsFragmentCreated;
      private boolean mFocusOnContent;
      private CrashRestorer mCrashRestorer;
 +    private PatSyncClient mPatSync;
 +    private int mRumbleRequest;
++    private Disposable mRecentYouTube;
 +    private String mHomeSource;
  
      @Override
      public void onCreate(Bundle savedInstanceState) {
-@@ -66,6 +75,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -66,6 +82,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
          }
          
          mCrashRestorer = new CrashRestorer(getContext(), savedInstanceState);
@@ -2142,7 +2284,7 @@ index 648aa8d42..abe834fb9 100644
          mIsFragmentCreated = true;
  
          mSections = new HashMap<>();
-@@ -236,7 +248,7 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -236,7 +255,7 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      }
  
      private int getSelectedHeaderId() {
@@ -2151,7 +2293,7 @@ index 648aa8d42..abe834fb9 100644
              return -1;
          }
  
-@@ -309,12 +321,56 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -309,12 +328,92 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      @Override
      public void updateSection(VideoGroup group) {
          restoreMainFragment();
@@ -2180,27 +2322,63 @@ index 648aa8d42..abe834fb9 100644
 +        if (rows instanceof MultipleRowsFragment) {
 +            ((MultipleRowsFragment) rows).setRumbleTopics(mixed ? mPatSync : null);
 +        }
-+        if (sectionId != BrowsePresenter.PAT_RUMBLE && !(home && !showYouTubeHome())) return;
-+
 +        int request = ++mRumbleRequest;
-+        mPatSync.rumbleHome(result -> {
-+            if (request != mRumbleRequest || getView() == null ||
-+                    getSelectedHeaderId() != sectionId || rows != mSectionFragmentFactory.getCurrentFragment()) return;
-+            if (result.ok()) {
-+                List<Video> cards = PatRumbleCards.from(result.data, mPatSync);
-+                updateRumbleRow(section, cards);
-+                if (cards.isEmpty())
-+                    Toast.makeText(requireContext(), "No Rumble videos available", Toast.LENGTH_LONG).show();
-+            } else {
-+                Toast.makeText(requireContext(), result.message, Toast.LENGTH_LONG).show();
-+            }
++        if (mRecentYouTube != null) mRecentYouTube.dispose();
++        if (home && showYouTubeHome()) {
++            loadRecentYouTube(section, rows, request, mixed);
++        } else if (sectionId == BrowsePresenter.PAT_RUMBLE || home) {
++            boolean followed = mPatSync.followedChannels().length() > 0;
++            mPatSync.rumbleHome(result -> {
++                if (!isCurrentFeed(section, rows, request)) return;
++                if (result.ok()) {
++                    List<Video> cards = PatRumbleCards.from(result.data, mPatSync);
++                    updateRecentRow(section, PatRecentUploads.merge(Collections.emptyList(), cards), followed);
++                    if (cards.isEmpty()) {
++                        Toast.makeText(requireContext(), "No Rumble videos available", Toast.LENGTH_LONG).show();
++                    }
++                } else {
++                    Toast.makeText(requireContext(), result.message, Toast.LENGTH_LONG).show();
++                }
++            });
++        }
++    }
++
++    private void loadRecentYouTube(BrowseSection section, Fragment rows, int request, boolean mixed) {
++        YouTubeServiceManager youtube = YouTubeServiceManager.instance();
++        if (!youtube.getSignInService().isSigned()) {
++            updateRecentWithRumble(section, rows, request, mixed, Collections.emptyList());
++            return;
++        }
++        mRecentYouTube = youtube.getContentService().getSubscriptionsObserve()
++                .map(group -> VideoGroup.from(group).getVideos())
++                .onErrorReturnItem(Collections.emptyList())
++                .defaultIfEmpty(Collections.emptyList())
++                .take(1)
++                .subscribe(videos -> updateRecentWithRumble(section, rows, request, mixed, videos));
++    }
++
++    private void updateRecentWithRumble(BrowseSection section, Fragment rows, int request, boolean mixed, List<Video> youtube) {
++        if (!isCurrentFeed(section, rows, request)) return;
++        if (!mixed || !mPatSync.paired() || mPatSync.followedChannels().length() == 0) {
++            updateRecentRow(section, PatRecentUploads.merge(youtube, Collections.emptyList()), true);
++            return;
++        }
++        mPatSync.rumbleHome(false, result -> {
++            if (!isCurrentFeed(section, rows, request)) return;
++            List<Video> rumble = result.ok() ? PatRumbleCards.from(result.data, mPatSync) : Collections.emptyList();
++            updateRecentRow(section, PatRecentUploads.merge(youtube, rumble), true);
 +        });
 +    }
 +
-+    private void updateRumbleRow(BrowseSection section, List<Video> cards) {
++    private boolean isCurrentFeed(BrowseSection section, Fragment rows, int request) {
++        return request == mRumbleRequest && getView() != null &&
++                getSelectedHeaderId() == section.getId() && rows == mSectionFragmentFactory.getCurrentFragment();
++    }
++
++    private void updateRecentRow(BrowseSection section, List<Video> cards, boolean followed) {
 +        VideoGroup row = VideoGroup.from(cards, section, 0);
-+        row.setId(BrowsePresenter.PAT_RUMBLE);
-+        row.setTitle("Rumble");
++        row.setId(MultipleRowsFragment.RECENT_UPLOADS_ID);
++        row.setTitle(followed ? getString(R.string.pat_recent_from_your_channels) : "Rumble");
 +        row.setAction(VideoGroup.ACTION_REPLACE);
 +        if (!cards.isEmpty()) restoreMainFragment();
 +        mSectionFragmentFactory.updateCurrentFragment(row);
@@ -2209,7 +2387,16 @@ index 648aa8d42..abe834fb9 100644
      @Override
      public void updateSection(SettingsGroup group) {
          restoreMainFragment();
-@@ -470,6 +526,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -441,6 +540,8 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+ 
+     @Override
+     public void onDestroyView() {
++        ++mRumbleRequest;
++        if (mRecentYouTube != null) mRecentYouTube.dispose();
+         mSectionFragmentFactory.cleanup();
+ 
+         super.onDestroyView();
+@@ -470,6 +571,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
          }
  
          mIsFragmentCreated = false;
@@ -2248,7 +2435,7 @@ index 5438f87d5..3288988c0 100644
                  && lastGroup.getMediaGroup() != null
                  && lastGroup.getMediaGroup().getNextPageKey() == null
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
-index ab21c3eb9..bdf67af8a 100644
+index ab21c3eb9..602a71a52 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
 @@ -1,6 +1,7 @@
@@ -2280,17 +2467,18 @@ index ab21c3eb9..bdf67af8a 100644
  
  public abstract class MultipleRowsFragment extends RowsSupportFragment implements VideoSection {
      private static final String TAG = MultipleRowsFragment.class.getSimpleName();
-@@ -52,6 +58,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -52,6 +58,10 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
      private ShortsCardPresenter mShortsPresenter;
      private int mSelectedRowIndex = -1;
      private ChannelHeaderCallback mChannelHeaderCallback;
++    public static final int RECENT_UPLOADS_ID = 0x50415404;
 +    private PatSyncClient mRumbleTopics;
 +    private final Set<VideoGroupObjectAdapter> mTopicRequests = new HashSet<>();
 +    private Runnable mPendingTopic;
  
      @Override
      public void onCreate(@Nullable Bundle savedInstanceState) {
-@@ -109,8 +118,67 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -109,8 +119,68 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
          mShortsPresenter.setOnItemViewLongPressedListener(new ItemViewLongPressedListener());
      }
  
@@ -2322,7 +2510,8 @@ index ab21c3eb9..bdf67af8a 100644
 +        VideoGroupObjectAdapter adapter = (VideoGroupObjectAdapter) row.getAdapter();
 +        String title = row.getHeaderItem().getName();
 +        String topic = title == null ? "" : title.trim();
-+        if (topic.length() < 2 || mTopicRequests.contains(adapter)) return;
++        if (topic.length() < 2 || mTopicRequests.contains(adapter) ||
++                adapter == mVideoGroupAdapters.get(RECENT_UPLOADS_ID)) return;
 +
 +        mPendingTopic = () -> {
 +            mPendingTopic = null;
@@ -2358,7 +2547,19 @@ index ab21c3eb9..bdf67af8a 100644
          if (mRowsAdapter != null) {
              mRowsAdapter.clear();
              if (mChannelHeaderCallback != null) {
-@@ -329,7 +397,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -219,6 +289,11 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+             group.setPosition(group.getPosition() + 1);
+         }
+ 
++        if (group.getId() != RECENT_UPLOADS_ID && group.getPosition() != -1 &&
++                mVideoGroupAdapters.containsKey(RECENT_UPLOADS_ID)) {
++            group.setPosition(group.getPosition() + 1);
++        }
++
+         int action = group.getAction();
+ 
+         if (action == VideoGroup.ACTION_REPLACE) {
+@@ -329,7 +404,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
          public void onItemLongPressed(Presenter.ViewHolder itemViewHolder, Object item) {
  
              if (item instanceof Video) {
@@ -2368,7 +2569,7 @@ index ab21c3eb9..bdf67af8a 100644
              } else {
                  Toast.makeText(getActivity(), item.toString(), Toast.LENGTH_SHORT).show();
              }
-@@ -342,7 +411,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -342,7 +418,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
                                    RowPresenter.ViewHolder rowViewHolder, Row row) {
  
              if (item instanceof Video) {
@@ -2379,7 +2580,7 @@ index ab21c3eb9..bdf67af8a 100644
              } else {
                  Toast.makeText(getActivity(), item.toString(), Toast.LENGTH_SHORT).show();
              }
-@@ -353,12 +424,16 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -353,23 +431,29 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
          @Override
          public void onItemSelected(Presenter.ViewHolder itemViewHolder, Object item,
                                     RowPresenter.ViewHolder rowViewHolder, Row row) {
@@ -2399,7 +2600,11 @@ index ab21c3eb9..bdf67af8a 100644
              }
          }
  
-@@ -369,7 +444,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+         private void checkScrollEnd(Video item) {
++            if (item.getGroup() != null && item.getGroup().getId() == RECENT_UPLOADS_ID) return;
+             for (VideoGroupObjectAdapter adapter : mVideoGroupAdapters.values()) {
+                 int index = adapter.indexOf(item);
+ 
                  if (index != -1) {
                      int size = adapter.size();
                      if (index > (size - ViewUtil.ROW_SCROLL_CONTINUE_NUM)) {
@@ -2475,10 +2680,10 @@ index 000000000..969614184
 +</vector>
 diff --git a/smarttubetv/src/main/res/values/pat_rumble_follow.xml b/smarttubetv/src/main/res/values/pat_rumble_follow.xml
 new file mode 100644
-index 000000000..5e3f35a8c
+index 000000000..ff1550c80
 --- /dev/null
 +++ b/smarttubetv/src/main/res/values/pat_rumble_follow.xml
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,14 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <item name="action_follow_rumble" type="id" />
@@ -2491,4 +2696,5 @@ index 000000000..5e3f35a8c
 +    <string name="pat_rumble_follow_no_matches">No matching channels found. You can add a channel by URL in Rumble sync.</string>
 +    <string name="pat_rumble_follow_result">%1$s\n%2$s</string>
 +    <string name="pat_rumble_follow_saved">Following %1$s in SmartTube</string>
++    <string name="pat_recent_from_your_channels">Recent from your channels</string>
 +</resources>
