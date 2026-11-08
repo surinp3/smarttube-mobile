@@ -2,7 +2,7 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v15** includes the mixed Home feed and Rumble audio handling.
+Version **v16** adds **Follow on Rumble** to the YouTube player controls. Choose a matching channel to save it to your synced SmartTube follows.
 
 - **Both** mixes YouTube and Rumble in the Home feed. Rumble uses followed
   channels or shows live videos when you have no follows.

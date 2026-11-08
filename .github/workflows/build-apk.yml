@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Build and stage a signed v15 update'
+        description: 'Build and stage a signed v16 update'
         required: false
         type: boolean
         default: false
@@ -101,11 +101,11 @@ jobs:
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v15-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v15-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v16-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v16-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v15-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v15-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v16-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v16-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -126,17 +126,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v15-ARM64-APK
+          name: SmartTube-Mobile-v16-ARM64-APK
           path: output
       - name: Stage release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v15 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v15 is already published; increment the mobile version for the next release."
+          if gh release view v16 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v16 is already published; increment the mobile version for the next release."
           else
-            gh release create v15 output/SmartTube-Mobile-v15-ARM64.apk \
+            gh release create v16 output/SmartTube-Mobile-v16-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "SmartTube Mobile v15 — Mixed Home feed" \
-              --notes "Home mixes YouTube and Rumble cards in Both mode. Rumble uses followed channels or live videos when you have none. The Rumble player requests Android media audio focus and uses the media volume control."
+              --title "SmartTube Mobile v16 — Follow on Rumble" \
+              --notes "Adds Follow on Rumble to the YouTube player controls. Pick a matching Rumble channel to save it to your synced SmartTube follows."
           fi

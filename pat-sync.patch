@@ -125,7 +125,7 @@ index 5e3ed0317..ac0298688 100644
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 93c0d576f..80e9de7c0 100644
+index cc8cdb0ed..d7cbb20db 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -216,6 +216,8 @@ dependencies {
@@ -814,6 +814,141 @@ index 000000000..b8e99bc43
 +    public static void open(Context context, Video card) {
 +        context.startActivity(new Intent(context, PatRumblePlayerActivity.class)
 +                .putExtra(PatRumblePlayerActivity.EXTRA_VIDEO, card.description));
++    }
++}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleFollow.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleFollow.java
+new file mode 100644
+index 000000000..e8abb48fa
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleFollow.java
+@@ -0,0 +1,129 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Intent;
++import android.widget.Toast;
++
++import com.liskovsoft.smartyoutubetv2.tv.R;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.regex.Pattern;
++
++public final class PatRumbleFollow {
++    private static final int MAX_MATCHES = 8;
++    private static final Pattern CHANNEL_URL =
++            Pattern.compile("https://rumble\\.com/(c|user)/[A-Za-z0-9_-]{2,100}/?");
++
++    private PatRumbleFollow() { }
++
++    public static void show(Activity activity, String author) {
++        String creator = author == null ? "" : author.trim();
++        if (nameKey(creator).isEmpty()) {
++            Toast.makeText(activity, R.string.pat_rumble_creator_unavailable, Toast.LENGTH_SHORT).show();
++            return;
++        }
++        PatSyncClient sync = new PatSyncClient(activity);
++        if (!sync.paired()) {
++            new AlertDialog.Builder(activity).setTitle(R.string.pat_follow_on_rumble)
++                    .setMessage(R.string.pat_rumble_follow_pair_first)
++                    .setNegativeButton(android.R.string.cancel, null)
++                    .setPositiveButton(R.string.pat_rumble_open_sync, (dialog, which) ->
++                            activity.startActivity(new Intent(activity, PatHubActivity.class)))
++                    .show();
++            return;
++        }
++
++        AlertDialog loading = new AlertDialog.Builder(activity)
++                .setTitle(R.string.pat_follow_on_rumble)
++                .setMessage(activity.getString(R.string.pat_rumble_follow_searching, creator))
++                .setNegativeButton(android.R.string.cancel, null).show();
++        // The sync API accepts queries of 2–100 characters. Quote a one-character
++        // name so the provider still searches for the original creator name.
++        String query = creator.length() == 1 ? "\"" + creator + "\"" :
++                creator.substring(0, Math.min(creator.length(), 100));
++        sync.rumbleSearch(query, result -> {
++            if (activity.isFinishing() || activity.isDestroyed() || !loading.isShowing()) return;
++            loading.dismiss();
++            if (!result.ok()) {
++                Toast.makeText(activity, result.message, Toast.LENGTH_LONG).show();
++                return;
++            }
++            showMatches(activity, sync, creator, result.data.optJSONArray("videos"));
++        });
++    }
++
++    private static void showMatches(Activity activity, PatSyncClient sync, String creator, JSONArray videos) {
++        List<Channel> channels = matchingChannels(creator, videos);
++        AlertDialog.Builder dialog = new AlertDialog.Builder(activity)
++                .setTitle(activity.getString(R.string.pat_rumble_follow_choose, creator))
++                .setNegativeButton(android.R.string.cancel, null);
++        if (channels.isEmpty()) {
++            dialog.setMessage(R.string.pat_rumble_follow_no_matches).show();
++            return;
++        }
++        List<String> labels = new ArrayList<>();
++        for (Channel channel : channels) {
++            labels.add(activity.getString(R.string.pat_rumble_follow_result, channel.name,
++                    channel.url.substring("https://".length())));
++        }
++        dialog.setItems(labels.toArray(new String[0]), (selected, index) -> {
++            Channel channel = channels.get(index);
++            if (!sync.isFollowed(channel.url)) {
++                sync.follow(channel.url, channel.name, true);
++                sync.syncNow(null);
++            }
++            Toast.makeText(activity, activity.getString(R.string.pat_rumble_follow_saved, channel.name),
++                    Toast.LENGTH_SHORT).show();
++        }).show();
++    }
++
++    private static List<Channel> matchingChannels(String creator, JSONArray videos) {
++        String creatorKey = nameKey(creator);
++        Map<String, Channel> unique = new LinkedHashMap<>();
++        if (videos != null) for (int i = 0; i < videos.length(); i++) {
++            JSONObject video = videos.optJSONObject(i);
++            if (video == null) continue;
++            String url = video.optString("channelUrl");
++            String name = video.optString("channelName").trim();
++            if (name.isEmpty() || !CHANNEL_URL.matcher(url).matches()) continue;
++            if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
++            String displayKey = nameKey(name);
++            String handleKey = nameKey(url.substring(url.lastIndexOf('/') + 1));
++            boolean exact = creatorKey.equals(displayKey) || creatorKey.equals(handleKey);
++            boolean similar = creatorKey.length() >= 4 &&
++                    (displayKey.contains(creatorKey) || handleKey.contains(creatorKey));
++            if (!exact && !similar) continue;
++            String key = url.toLowerCase(Locale.ROOT);
++            if (!unique.containsKey(key)) unique.put(key, new Channel(url, name, exact));
++        }
++        List<Channel> ranked = new ArrayList<>(unique.values());
++        // Keep the provider's result order within exact and similar names.
++        Collections.sort(ranked, (left, right) -> Boolean.compare(right.exact, left.exact));
++        return ranked.subList(0, Math.min(ranked.size(), MAX_MATCHES));
++    }
++
++    private static String nameKey(String name) {
++        return name.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]", "");
++    }
++
++    private static final class Channel {
++        final String url;
++        final String name;
++        final boolean exact;
++
++        Channel(String url, String name, boolean exact) {
++            this.url = url;
++            this.name = name;
++            this.exact = exact;
++        }
 +    }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
@@ -1584,7 +1719,7 @@ index 000000000..9e986772a
 +    }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-index ee6b2ce4d..39eaa2da4 100644
+index ee6b2ce4d..af130dd36 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 @@ -51,6 +51,9 @@ import com.liskovsoft.mediaserviceinterfaces.SignInService;
@@ -1612,7 +1747,7 @@ index ee6b2ce4d..39eaa2da4 100644
      private static final int SECONDARY = Color.rgb(170, 170, 170);
      private static final int ACCENT = Color.rgb(255, 35, 35);
 -    private static final int MOBILE_VERSION = 13;
-+    private static final int MOBILE_VERSION = 15;
++    private static final int MOBILE_VERSION = 16;
      private static final String MOBILE_PREFERENCES = "smarttube_mobile";
      private static final String HIDE_HOME_SHORTS = "hide_home_shorts";
      private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
@@ -2059,3 +2194,86 @@ index ab21c3eb9..5114d6c48 100644
              }
          }
  
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
+index d50cc392b..06a7b910d 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
+@@ -66,6 +66,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleFollow;
+ import com.liskovsoft.smartyoutubetv2.tv.R;
+ import com.liskovsoft.smartyoutubetv2.tv.adapter.VideoGroupObjectAdapter;
+ import com.liskovsoft.smartyoutubetv2.tv.presenter.CustomListRowPresenter;
+@@ -813,6 +814,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
+ 
+         @Override
+         public void onAction(int actionId, int actionIndex) {
++            if (actionId == R.id.action_follow_rumble) {
++                Video video = getVideo();
++                PatRumbleFollow.show(requireActivity(), video == null ? null : video.getAuthor());
++                return;
++            }
+             mPlaybackPresenter.onButtonClicked(actionId, actionIndex);
+         }
+ 
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java
+index e6e96f1dc..d8fb069e6 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java
+@@ -118,6 +118,11 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
+         putAction(new ClosedCaptioningAction(context));
+         putAction(new PlaylistAddAction(context));
+         putAction(new SubscribeAction(context));
++        String packageName = context.getPackageName();
++        if ("app.smarttube.pattv".equals(packageName) || "app.smarttube.mobile".equals(packageName)) {
++            putAction(new Action(R.id.action_follow_rumble, context.getString(R.string.pat_follow_on_rumble),
++                    null, ContextCompat.getDrawable(context, R.drawable.action_follow_rumble)));
++        }
+         putAction(new VideoInfoAction(context));
+         putAction(new VideoSpeedAction(context));
+         putAction(new VideoStatsAction(context));
+@@ -225,6 +230,10 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
+         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SUBSCRIBE)) {
+             adapter.add(mActions.get(R.id.action_subscribe));
+         }
++        Action followRumble = mActions.get(R.id.action_follow_rumble);
++        if (followRumble != null) {
++            adapter.add(followRumble);
++        }
+         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_INFO)) {
+             adapter.add(mActions.get(R.id.action_info));
+         }
+diff --git a/smarttubetv/src/main/res/drawable/action_follow_rumble.xml b/smarttubetv/src/main/res/drawable/action_follow_rumble.xml
+new file mode 100644
+index 000000000..969614184
+--- /dev/null
++++ b/smarttubetv/src/main/res/drawable/action_follow_rumble.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp" android:height="24dp"
++    android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FFFFFFFF"
++        android:pathData="M3,4.8 L14.5,12 L3,19.2 Z M18,7 H20 V11 H24 V13 H20 V17 H18 V13 H14 V11 H18 Z" />
++</vector>
+diff --git a/smarttubetv/src/main/res/values/pat_rumble_follow.xml b/smarttubetv/src/main/res/values/pat_rumble_follow.xml
+new file mode 100644
+index 000000000..5e3f35a8c
+--- /dev/null
++++ b/smarttubetv/src/main/res/values/pat_rumble_follow.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <item name="action_follow_rumble" type="id" />
++    <string name="pat_follow_on_rumble">Follow on Rumble</string>
++    <string name="pat_rumble_creator_unavailable">The creator name is unavailable for this video.</string>
++    <string name="pat_rumble_follow_pair_first">Connect this device in Rumble sync to look up channels.</string>
++    <string name="pat_rumble_open_sync">Open Rumble sync</string>
++    <string name="pat_rumble_follow_searching">Looking for %1$s on Rumble…</string>
++    <string name="pat_rumble_follow_choose">Follow %1$s on Rumble</string>
++    <string name="pat_rumble_follow_no_matches">No matching channels found. You can add a channel by URL in Rumble sync.</string>
++    <string name="pat_rumble_follow_result">%1$s\n%2$s</string>
++    <string name="pat_rumble_follow_saved">Following %1$s in SmartTube</string>
++</resources>

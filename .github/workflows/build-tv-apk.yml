@@ -120,15 +120,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v4-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v4-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v4-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v4-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v5-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v5-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v5-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v5-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v4-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v4-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v4-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v4-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v5-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v5-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v5-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v5-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -149,21 +149,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v4-SIGNED-APKs
+          name: SmartTube-Pat-TV-v5-SIGNED-APKs
           path: output
       - name: Stage TV release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v4 is already published; increment the TV version for the next release.'
+          if gh release view tv-v5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v5 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v4 \
-              output/SmartTube-Pat-TV-v4-ARMv7.apk \
-              output/SmartTube-Pat-TV-v4-ARM64.apk \
-              output/SmartTube-Pat-TV-v4-Universal.apk \
+            gh release create tv-v5 \
+              output/SmartTube-Pat-TV-v5-ARMv7.apk \
+              output/SmartTube-Pat-TV-v5-ARM64.apk \
+              output/SmartTube-Pat-TV-v5-Universal.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v4 — YouTube and Rumble sidebar' \
-              --notes 'Adds YouTube, Rumble and Both to the main TV sidebar. Both puts a Rumble row alongside YouTube on Home. Rumble uses followed channels or live videos when you have none. Includes ARMv7, ARM64 and Universal APKs.' \
+              --title 'SmartTube Pat TV v5 — Follow on Rumble' \
+              --notes 'Adds Follow on Rumble to the YouTube player controls. Pick a matching Rumble channel to save it to your synced SmartTube follows. Includes ARMv7, ARM64 and Universal APKs.' \
               --latest=false
           fi
