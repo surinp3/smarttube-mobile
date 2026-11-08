@@ -206,6 +206,45 @@ test("Rumble channel discovery rejects arbitrary URLs and needs a server key", a
   assert.equal(noKey.status, 503);
 });
 
+test("Rumble browsing serves expired cards at its cap and leaves room for playback", async () => {
+  let calls = 0;
+  const video = {
+    id: "v79xhhm", title: "Saved video", live: true,
+    url: "https://rumble.com/v79xhhm-saved-video.html",
+    files: [{ type: "hls", url: "https://video.rumble.com/stream.m3u8" }],
+  };
+  const h = harness({
+    rumbleApiKey: "test-key",
+    fetch: async (url) => {
+      calls++;
+      return Response.json(url.pathname.endsWith("/video") ? video : { videos: [video] });
+    },
+  });
+  const token = (await h.bootstrap()).body.deviceToken;
+  const search = (query) => h.request("GET", `/v1/rumble/search?q=${query}`, undefined, token);
+  assert.equal((await search("boats")).body.videos[0].live, true);
+  h.advance(3_600_001);
+  const responses = await Promise.all(Array.from({ length: 30 }, (_, index) => search(`topic-${index}`)));
+  assert.equal(responses.filter(({ status }) => status === 200).length, 23);
+  assert.equal(responses.filter(({ status }) => status === 429).length, 7);
+
+  const saved = await search("boats");
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.cached, true);
+  assert.equal(saved.body.stale, true);
+  assert.equal(saved.body.videos[0].title, video.title);
+  assert.equal(saved.body.videos[0].live, false);
+  assert.equal(saved.body.videos[0].streamUrl, null);
+  assert.deepEqual(saved.body.videos[0].files, []);
+  assert.equal(calls, 24);
+
+  const playback = await Promise.all(Array.from({ length: 7 }, (_, index) =>
+    h.request("GET", `/v1/rumble/video?url=https://rumble.com/v79xhh${index}.html`, undefined, token)));
+  assert.equal(playback.filter(({ status }) => status === 200).length, 6);
+  assert.equal(playback.filter(({ status }) => status === 429).length, 1);
+  assert.equal(calls, 30);
+});
+
 test("Rumble Home can discover live videos before any channels are followed", async () => {
   const requests = [];
   const h = harness({

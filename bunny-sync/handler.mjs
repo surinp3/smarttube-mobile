@@ -293,13 +293,22 @@ async function rumbleVideos(db, request, config, timestamp) {
   if (cached && cached.expires_at_ms > timestamp) {
     return result(200, { ...JSON.parse(cached.body_json), cached: true });
   }
+  // Directory entries can outlive their refresh interval. Stream URLs have their own cache.
+  const fallback = (status, error) => {
+    if (cached && timestamp - cached.expires_at_ms < 86_400_000) {
+      const payload = JSON.parse(cached.body_json);
+      const videos = payload.videos.map(({ files, streamUrl, ...video }) => ({
+        ...video, live: false, files: [], streamUrl: null,
+      }));
+      return result(200, { ...payload, videos, cached: true, stale: true });
+    }
+    return result(status, { error });
+  };
   if (!limitedString(config.rumbleApiKey, 512)) {
     return result(503, { error: "Rumble discovery API key not configured" });
   }
-  // 30 paid lookups/day, under API.SH's advertised 1,000 monthly free calls.
-  // This is intentionally conservative; cached responses cost no credits.
-  if (!await rateLimit(db, "rumble-fetch", timestamp, 30, 86_400_000)) {
-    return result(429, { error: "Daily Rumble lookup allowance reached" });
+  if (!await takeRumbleLookup(db, timestamp, 24)) {
+    return fallback(429, "Daily Rumble browsing allowance reached. Saved results are shown when available.");
   }
   const endpoint = input.mode === "channel" ? "channel/videos" : input.mode;
   const upstream = new URL(`https://api.api.sh/rumble/v1/${endpoint}`);
@@ -314,15 +323,15 @@ async function rumbleVideos(db, request, config, timestamp) {
       signal: AbortSignal.timeout(12_000),
     });
   } catch {
-    return result(502, { error: "Rumble directory service unreachable" });
+    return fallback(502, "Rumble directory service unreachable");
   }
-  if (!response.ok) return result(502, { error: "Rumble directory service rejected request" });
+  if (!response.ok) return fallback(502, "Rumble directory service rejected request");
   let data;
   try { data = await response.json(); }
-  catch { return result(502, { error: "Invalid Rumble directory response" }); }
+  catch { return fallback(502, "Invalid Rumble directory response"); }
   const videos = input.mode === "live" ? data?.streams : data?.videos;
   if (!isObject(data) || !Array.isArray(videos)) {
-    return result(502, { error: "Rumble directory did not return videos" });
+    return fallback(502, "Rumble directory did not return videos");
   }
   const payload = {
     videos: videos.slice(0, 50).map(normalizeRumbleVideo).filter(Boolean),
@@ -343,6 +352,18 @@ async function rumbleVideos(db, request, config, timestamp) {
   return result(200, { ...payload, cached: false });
 }
 
+// Both request types share a cap of 30 provider calls. Browsing leaves six slots for playback.
+async function takeRumbleLookup(db, timestamp, limit) {
+  const bucket = Math.floor(timestamp / 86_400_000);
+  const update = await db.prepare(
+    "INSERT INTO sync_rate_limits(name, bucket, attempts) VALUES ('rumble-fetch', ?, 1) " +
+    "ON CONFLICT(name) DO UPDATE SET bucket = excluded.bucket, " +
+    "attempts = CASE WHEN bucket = excluded.bucket THEN attempts + 1 ELSE 1 END " +
+    "WHERE bucket != excluded.bucket OR attempts < ?"
+  ).bind(bucket, limit).run();
+  return update.rowsAffected === 1;
+}
+
 /** Search results do not contain media URLs; resolve streams only when a video is opened. */
 async function rumbleVideo(db, request, config, timestamp) {
   const videoUrl = parseRumbleVideoUrl(request);
@@ -354,7 +375,7 @@ async function rumbleVideo(db, request, config, timestamp) {
     return result(200, { ...JSON.parse(cached.body_json), cached: true });
   if (!limitedString(config.rumbleApiKey, 512))
     return result(503, { error: "Rumble video API key not configured" });
-  if (!await rateLimit(db, "rumble-fetch", timestamp, 30, 86_400_000))
+  if (!await takeRumbleLookup(db, timestamp, 30))
     return result(429, { error: "Daily Rumble lookup allowance reached" });
   const upstream = new URL("https://api.api.sh/rumble/v1/video");
   upstream.searchParams.set("url", videoUrl);

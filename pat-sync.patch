@@ -11,10 +11,18 @@ index d4271e21a..7fb578c16 100644
      public int sectionId = -1;
      public String channelGroupId;
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
-index 8d81a5a9d..394c85d7d 100644
+index 8d81a5a9d..2758db32e 100644
 --- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
 +++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
-@@ -58,6 +58,9 @@ import io.reactivex.Observable;
+@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
+ 
+ import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
+ import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
++import com.liskovsoft.mediaserviceinterfaces.data.MediaItem;
+ import com.liskovsoft.sharedutils.helpers.Helpers;
+ import com.liskovsoft.sharedutils.locale.LocaleUtility;
+ import com.liskovsoft.sharedutils.mylogger.Log;
+@@ -58,6 +59,9 @@ import io.reactivex.Observable;
  import io.reactivex.disposables.Disposable;
  
  public class BrowsePresenter extends BasePresenter<BrowseView> implements SectionPresenter, VideoGroupPresenter, AccountChangeListener {
@@ -24,7 +32,7 @@ index 8d81a5a9d..394c85d7d 100644
      private static final String TAG = BrowsePresenter.class.getSimpleName();
      @SuppressLint("StaticFieldLeak")
      private static BrowsePresenter sInstance;
-@@ -187,6 +190,11 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+@@ -187,6 +191,11 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
          int uploadsType = getMainUIData().isUploadsOldLookEnabled() ? BrowseSection.TYPE_GRID : BrowseSection.TYPE_MULTI_GRID;
  
          mSectionsMapping.put(MediaGroup.TYPE_HOME, new BrowseSection(MediaGroup.TYPE_HOME, getContext().getString(R.string.header_home), BrowseSection.TYPE_ROW, R.drawable.icon_home, false));
@@ -36,18 +44,20 @@ index 8d81a5a9d..394c85d7d 100644
          mSectionsMapping.put(MediaGroup.TYPE_SHORTS, new BrowseSection(MediaGroup.TYPE_SHORTS, getContext().getString(R.string.header_shorts), BrowseSection.TYPE_SHORTS_GRID, R.drawable.icon_shorts));
          mSectionsMapping.put(MediaGroup.TYPE_TRENDING, new BrowseSection(MediaGroup.TYPE_TRENDING, getContext().getString(R.string.header_trending), BrowseSection.TYPE_ROW, R.drawable.icon_trending));
          mSectionsMapping.put(MediaGroup.TYPE_KIDS_HOME, new BrowseSection(MediaGroup.TYPE_KIDS_HOME, getContext().getString(R.string.header_kids_home), BrowseSection.TYPE_ROW, R.drawable.icon_kids_home));
-@@ -214,6 +222,10 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+@@ -214,6 +223,12 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
  
      private void initRowAndGridMapping() {
          mRowMapping.put(MediaGroup.TYPE_HOME, getContentService().getHomeObserve());
 +        if (mSectionsMapping.containsKey(PAT_YOUTUBE)) {
-+            mRowMapping.put(PAT_YOUTUBE, mRowMapping.get(MediaGroup.TYPE_HOME));
-+            mRowMapping.put(PAT_BOTH, mRowMapping.get(MediaGroup.TYPE_HOME));
++            Observable<List<MediaGroup>> home = getPatHomeRows();
++            mRowMapping.put(MediaGroup.TYPE_HOME, home);
++            mRowMapping.put(PAT_YOUTUBE, home);
++            mRowMapping.put(PAT_BOTH, home);
 +        }
          mRowMapping.put(MediaGroup.TYPE_TRENDING, getContentService().getTrendingObserve());
          mRowMapping.put(MediaGroup.TYPE_KIDS_HOME, getContentService().getKidsHomeObserve());
          mRowMapping.put(MediaGroup.TYPE_SPORTS, getContentService().getSportsObserve());
-@@ -252,6 +264,14 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+@@ -252,6 +267,14 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
          }
      }
  
@@ -62,7 +72,7 @@ index 8d81a5a9d..394c85d7d 100644
      private void initPinnedCallbacks() {
          Collection<Video> pinnedItems = getSidebarService().getPinnedItems();
  
-@@ -338,6 +358,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+@@ -338,6 +361,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
  
      private void initPinnedData() {
          initPinnedSections();
@@ -70,7 +80,7 @@ index 8d81a5a9d..394c85d7d 100644
          initPinnedCallbacks();
          initPasswordSection();
      }
-@@ -501,6 +522,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+@@ -501,6 +525,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
  
      @Override
      public void onSectionLongPressed(int sectionId) {
@@ -78,7 +88,44 @@ index 8d81a5a9d..394c85d7d 100644
          SectionMenuPresenter.instance(getContext()).showMenu(findSectionById(sectionId));
      }
  
-@@ -1080,7 +1102,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+@@ -1022,6 +1047,36 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+         return result != null ? result : previousSection;
+     }
+ 
++    private Observable<List<MediaGroup>> getPatHomeRows() {
++        Observable<List<MediaGroup>> subscriptions = Observable.defer(() -> {
++            if (!getSignInService().isSigned()) return Observable.empty();
++            return getContentService().getSubscriptionsObserve()
++                    .map(group -> new ArrayList<>(Collections.singletonList(group)));
++        });
++        return usablePatHomeRows(getContentService().getHomeObserve())
++                .onErrorResumeNext(Observable.empty())
++                .switchIfEmpty(usablePatHomeRows(subscriptions)
++                        .onErrorResumeNext(Observable.empty())
++                        .switchIfEmpty(usablePatHomeRows(getContentService().getTrendingObserve())));
++    }
++
++    private Observable<List<MediaGroup>> usablePatHomeRows(Observable<List<MediaGroup>> source) {
++        return source.map(groups -> {
++            List<MediaGroup> visible = new ArrayList<>(groups);
++            visible.removeAll(Collections.singleton(null));
++            filterHomeIfNeeded(visible);
++            return visible;
++        }).filter(groups -> {
++            for (MediaGroup group : groups) {
++                if (group == null || group.isEmpty()) continue;
++                for (MediaItem item : group.getMediaItems()) {
++                    if (item != null && !TextUtils.isEmpty(item.getVideoId())) return true;
++                }
++            }
++            return false;
++        });
++    }
++
+     private void filterHomeIfNeeded(List<MediaGroup> mediaGroups) {
+         if (mediaGroups == null || !isHomeSection()) {
+             return;
+@@ -1080,7 +1135,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
      }
  
      public boolean isHomeSection() {
@@ -115,7 +162,7 @@ index 5e3ed0317..ac0298688 100644
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 52499ec2b..c45518b5c 100644
+index 1a649d77e..9d53a0a58 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -216,6 +216,8 @@ dependencies {
@@ -1327,10 +1374,10 @@ index 000000000..ff290908f
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
 new file mode 100644
-index 000000000..01100701f
+index 000000000..ce137dc1b
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
-@@ -0,0 +1,511 @@
+@@ -0,0 +1,512 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.content.Context;
@@ -1805,7 +1852,8 @@ index 000000000..01100701f
 +                }
 +                if (!feed.ok()) {
 +                    failure = feed;
-+                    if (feed.code == 401 || feed.code == 429) break;
++                    // A later followed channel can still have cached results after a 429.
++                    if (feed.code == 401) break;
 +                    continue;
 +                }
 +                JSONArray items = feed.data.optJSONArray("videos");
@@ -2253,7 +2301,7 @@ index 686ad7b42..dd8eba620 100644
  
          mWidth = dimens.first;
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
-index 648aa8d42..7ecaf7f05 100644
+index 648aa8d42..6edf25214 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 @@ -7,6 +7,7 @@ import android.os.Looper;
@@ -2338,7 +2386,7 @@ index 648aa8d42..7ecaf7f05 100644
              return -1;
          }
  
-@@ -309,12 +329,87 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -309,12 +329,89 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      @Override
      public void updateSection(VideoGroup group) {
          restoreMainFragment();
@@ -2399,14 +2447,16 @@ index 648aa8d42..7ecaf7f05 100644
 +
 +    private void updateRecentWithRumble(BrowseSection section, Fragment rows, int request, List<Video> youtube) {
 +        if (!isCurrentFeed(section, rows, request)) return;
-+        if (!mPatSync.paired()) {
++        if (!youtube.isEmpty()) {
 +            updateRecentRow(section, PatRecentUploads.merge(youtube, Collections.emptyList()), true);
-+            return;
 +        }
++        if (!mPatSync.paired()) return;
 +        mPatSync.rumbleHome(result -> {
-+            if (!isCurrentFeed(section, rows, request)) return;
-+            List<Video> rumble = result.ok() ? PatRumbleCards.from(result.data, mPatSync) : Collections.emptyList();
-+            updateRecentRow(section, PatRecentUploads.merge(youtube, rumble), true);
++            if (!isCurrentFeed(section, rows, request) || !result.ok()) return;
++            List<Video> rumble = PatRumbleCards.from(result.data, mPatSync);
++            if (!rumble.isEmpty()) {
++                updateRecentRow(section, PatRecentUploads.merge(youtube, rumble), true);
++            }
 +        });
 +    }
 +
@@ -2427,7 +2477,7 @@ index 648aa8d42..7ecaf7f05 100644
      @Override
      public void updateSection(SettingsGroup group) {
          restoreMainFragment();
-@@ -441,6 +536,8 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -441,6 +538,8 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
  
      @Override
      public void onDestroyView() {
@@ -2436,7 +2486,7 @@ index 648aa8d42..7ecaf7f05 100644
          mSectionFragmentFactory.cleanup();
  
          super.onDestroyView();
-@@ -470,6 +567,10 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -470,6 +569,10 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
          }
  
          mIsFragmentCreated = false;
@@ -3158,7 +3208,7 @@ index e6e96f1dc..d8fb069e6 100644
              adapter.add(mActions.get(R.id.action_info));
          }
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java
-index be2ad5dd4..f98148590 100644
+index be2ad5dd4..ecdac823e 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java
 @@ -1,9 +1,16 @@
@@ -3166,34 +3216,32 @@ index be2ad5dd4..f98148590 100644
  
  import android.content.Context;
 +import android.graphics.Canvas;
-+import android.graphics.Path;
++import android.graphics.Outline;
 +import android.graphics.Rect;
-+import android.graphics.RectF;
 +import android.graphics.drawable.Drawable;
  import android.os.Handler;
  import android.os.Looper;
  import android.util.AttributeSet;
 +import android.view.View;
++import android.view.ViewOutlineProvider;
 +import android.widget.ImageView;
  import android.widget.ImageView.ScaleType;
  import android.widget.TextView;
  import androidx.leanback.widget.ImageCardView;
-@@ -17,6 +24,9 @@ public class ComplexImageCardView extends ImageCardView {
+@@ -17,6 +24,8 @@ public class ComplexImageCardView extends ImageCardView {
      private Handler mHandler;
      private boolean mIsCardTextAutoScrollEnabled;
      private boolean mIsBadgeEnabled;
 +    private ImageView mSourceBadge;
 +    private Drawable mTvFocusFrame;
-+    private final Path mTvCardClip = new Path();
  
      public ComplexImageCardView(Context context) {
          super(context);
-@@ -41,6 +51,51 @@ public class ComplexImageCardView extends ImageCardView {
+@@ -41,6 +50,50 @@ public class ComplexImageCardView extends ImageCardView {
          mHandler = new Handler(Looper.getMainLooper());
      }
  
 +    public void enableTvCardStyle() {
-+        setWillNotDraw(false);
 +        setCardType(CARD_TYPE_INFO_UNDER);
 +        setInfoVisibility(CARD_REGION_VISIBLE_ALWAYS);
 +        mSourceBadge = findViewById(R.id.pat_video_source_badge);
@@ -3208,27 +3256,27 @@ index be2ad5dd4..f98148590 100644
 +    }
 +
 +    @Override
-+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
-+        super.onSizeChanged(width, height, oldWidth, oldHeight);
++    protected void onAttachedToWindow() {
++        super.onAttachedToWindow();
 +        if (mTvFocusFrame == null) return;
 +        float radius = getResources().getDimension(R.dimen.pat_video_card_radius);
-+        mTvCardClip.reset();
-+        mTvCardClip.addRoundRect(new RectF(0, 0, width, height), radius, radius, Path.Direction.CW);
-+        mTvFocusFrame.setBounds(0, 0, width, height);
++        // Apply after Leanback has set up the card's shadow outline.
++        setOutlineProvider(new ViewOutlineProvider() {
++            @Override
++            public void getOutline(View view, Outline outline) {
++                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
++            }
++        });
++        setClipToOutline(true);
 +    }
 +
 +    @Override
-+    public void draw(Canvas canvas) {
-+        if (mTvFocusFrame == null) {
-+            super.draw(canvas);
-+            return;
++    public void onDrawForeground(Canvas canvas) {
++        super.onDrawForeground(canvas);
++        if (mTvFocusFrame != null && isFocused()) {
++            mTvFocusFrame.setBounds(0, 0, getWidth(), getHeight());
++            mTvFocusFrame.draw(canvas);
 +        }
-+        // Leanback can replace the view's outline and foreground when it attaches a card.
-+        int saveCount = canvas.save();
-+        canvas.clipPath(mTvCardClip);
-+        super.draw(canvas);
-+        if (isFocused()) mTvFocusFrame.draw(canvas);
-+        canvas.restoreToCount(saveCount);
 +    }
 +
 +    @Override
