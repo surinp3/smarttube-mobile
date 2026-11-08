@@ -1,0 +1,4 @@
+# Preserve CRLF context for upstream files stored with CRLF in the pinned tree.
+mobile.patch -text
+pat-sync.patch -text
+tv.patch -text

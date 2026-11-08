@@ -262,6 +262,9 @@ function parseRumbleQuery(request) {
   const url = new URL(request.url);
   const page = url.searchParams.get("page") ?? "1";
   if (!/^[1-9]\d?$/.test(page) || Number(page) > 10) return null;
+  if (url.pathname === "/v1/rumble/live") {
+    return { mode: "live", page: Number(page), cacheKey: `live:${page}` };
+  }
   if (url.pathname === "/v1/rumble/search") {
     const q = url.searchParams.get("q")?.trim();
     if (!q || q.length < 2 || q.length > 100) return null;
@@ -298,10 +301,11 @@ async function rumbleVideos(db, request, config, timestamp) {
   if (!await rateLimit(db, "rumble-fetch", timestamp, 30, 86_400_000)) {
     return result(429, { error: "Daily Rumble lookup allowance reached" });
   }
-  const upstream = new URL(input.mode === "search"
-    ? "https://api.api.sh/rumble/v1/search"
-    : "https://api.api.sh/rumble/v1/channel/videos");
-  upstream.searchParams.set(input.mode === "search" ? "q" : "url", input.query);
+  const endpoint = input.mode === "channel" ? "channel/videos" : input.mode;
+  const upstream = new URL(`https://api.api.sh/rumble/v1/${endpoint}`);
+  if (input.query !== undefined) {
+    upstream.searchParams.set(input.mode === "search" ? "q" : "url", input.query);
+  }
   upstream.searchParams.set("page", String(input.page));
   let response;
   try {
@@ -316,11 +320,12 @@ async function rumbleVideos(db, request, config, timestamp) {
   let data;
   try { data = await response.json(); }
   catch { return result(502, { error: "Invalid Rumble directory response" }); }
-  if (!isObject(data) || !Array.isArray(data.videos)) {
+  const videos = input.mode === "live" ? data?.streams : data?.videos;
+  if (!isObject(data) || !Array.isArray(videos)) {
     return result(502, { error: "Rumble directory did not return videos" });
   }
   const payload = {
-    videos: data.videos.slice(0, 50).map(normalizeRumbleVideo).filter(Boolean),
+    videos: videos.slice(0, 50).map(normalizeRumbleVideo).filter(Boolean),
     page: input.page,
     nextPage: nonnegativeInteger(data.next_page) ? data.next_page : null,
     channel: input.mode === "channel" && isObject(data.channel) ? {
@@ -465,7 +470,7 @@ export function createSyncHandler(db, config = {}) {
       const device = await getDevice(db, cryptoApi, request);
       if (!device) return result(401, { error: "Device is not paired" });
 
-      if ((path === "/v1/rumble/search" || path === "/v1/rumble/channel") && method === "GET") {
+      if ((path === "/v1/rumble/search" || path === "/v1/rumble/channel" || path === "/v1/rumble/live") && method === "GET") {
         return rumbleVideos(db, request, config, now());
       }
       if (path === "/v1/rumble/video" && method === "GET") {

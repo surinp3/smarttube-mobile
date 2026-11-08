@@ -1,5 +1,104 @@
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
+index 8d81a5a9d..daa552b99 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java
+@@ -58,6 +58,9 @@ import io.reactivex.Observable;
+ import io.reactivex.disposables.Disposable;
+ 
+ public class BrowsePresenter extends BasePresenter<BrowseView> implements SectionPresenter, VideoGroupPresenter, AccountChangeListener {
++    public static final int PAT_YOUTUBE = 0x50415401;
++    public static final int PAT_RUMBLE = 0x50415402;
++    public static final int PAT_BOTH = 0x50415403;
+     private static final String TAG = BrowsePresenter.class.getSimpleName();
+     @SuppressLint("StaticFieldLeak")
+     private static BrowsePresenter sInstance;
+@@ -187,6 +190,11 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+         int uploadsType = getMainUIData().isUploadsOldLookEnabled() ? BrowseSection.TYPE_GRID : BrowseSection.TYPE_MULTI_GRID;
+ 
+         mSectionsMapping.put(MediaGroup.TYPE_HOME, new BrowseSection(MediaGroup.TYPE_HOME, getContext().getString(R.string.header_home), BrowseSection.TYPE_ROW, R.drawable.icon_home, false));
++        if ("app.smarttube.pattv".equals(getContext().getPackageName())) {
++            mSectionsMapping.put(PAT_YOUTUBE, new BrowseSection(PAT_YOUTUBE, "YouTube", BrowseSection.TYPE_ROW, R.drawable.icon_home, false));
++            mSectionsMapping.put(PAT_RUMBLE, new BrowseSection(PAT_RUMBLE, "Rumble", BrowseSection.TYPE_ROW, R.drawable.icon_home, false));
++            mSectionsMapping.put(PAT_BOTH, new BrowseSection(PAT_BOTH, "Both", BrowseSection.TYPE_ROW, R.drawable.icon_home, false));
++        }
+         mSectionsMapping.put(MediaGroup.TYPE_SHORTS, new BrowseSection(MediaGroup.TYPE_SHORTS, getContext().getString(R.string.header_shorts), BrowseSection.TYPE_SHORTS_GRID, R.drawable.icon_shorts));
+         mSectionsMapping.put(MediaGroup.TYPE_TRENDING, new BrowseSection(MediaGroup.TYPE_TRENDING, getContext().getString(R.string.header_trending), BrowseSection.TYPE_ROW, R.drawable.icon_trending));
+         mSectionsMapping.put(MediaGroup.TYPE_KIDS_HOME, new BrowseSection(MediaGroup.TYPE_KIDS_HOME, getContext().getString(R.string.header_kids_home), BrowseSection.TYPE_ROW, R.drawable.icon_kids_home));
+@@ -214,6 +222,10 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+ 
+     private void initRowAndGridMapping() {
+         mRowMapping.put(MediaGroup.TYPE_HOME, getContentService().getHomeObserve());
++        if (mSectionsMapping.containsKey(PAT_YOUTUBE)) {
++            mRowMapping.put(PAT_YOUTUBE, mRowMapping.get(MediaGroup.TYPE_HOME));
++            mRowMapping.put(PAT_BOTH, mRowMapping.get(MediaGroup.TYPE_HOME));
++        }
+         mRowMapping.put(MediaGroup.TYPE_TRENDING, getContentService().getTrendingObserve());
+         mRowMapping.put(MediaGroup.TYPE_KIDS_HOME, getContentService().getKidsHomeObserve());
+         mRowMapping.put(MediaGroup.TYPE_SPORTS, getContentService().getSportsObserve());
+@@ -252,6 +264,14 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+         }
+     }
+ 
++    private void addPatSources() {
++        if (!mSectionsMapping.containsKey(PAT_YOUTUBE)) return;
++        int index = mSections.indexOf(mSectionsMapping.get(MediaGroup.TYPE_HOME)) + 1;
++        mSections.add(index++, mSectionsMapping.get(PAT_YOUTUBE));
++        mSections.add(index++, mSectionsMapping.get(PAT_RUMBLE));
++        mSections.add(index, mSectionsMapping.get(PAT_BOTH));
++    }
++
+     private void initPinnedCallbacks() {
+         Collection<Video> pinnedItems = getSidebarService().getPinnedItems();
+ 
+@@ -338,6 +358,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+ 
+     private void initPinnedData() {
+         initPinnedSections();
++        addPatSources();
+         initPinnedCallbacks();
+         initPasswordSection();
+     }
+@@ -501,6 +522,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+ 
+     @Override
+     public void onSectionLongPressed(int sectionId) {
++        if (sectionId == PAT_YOUTUBE || sectionId == PAT_RUMBLE || sectionId == PAT_BOTH) return;
+         SectionMenuPresenter.instance(getContext()).showMenu(findSectionById(sectionId));
+     }
+ 
+@@ -657,7 +679,8 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+                 }
+                 break;
+             case BrowseSection.TYPE_ROW:
+-                Observable<List<MediaGroup>> groups = mRowMapping.get(section.getId());
++                Observable<List<MediaGroup>> groups = section.getId() == MediaGroup.TYPE_HOME && !getView().showYouTubeHome()
++                        ? null : mRowMapping.get(section.getId());
+                 updateVideoRows(section, groups, section.isAuthOnly());
+                 break;
+             case BrowseSection.TYPE_SETTINGS_GRID:
+@@ -1080,7 +1103,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
+     }
+ 
+     public boolean isHomeSection() {
+-        return isSection(MediaGroup.TYPE_HOME);
++        return isSection(MediaGroup.TYPE_HOME) || isSection(PAT_YOUTUBE) || isSection(PAT_BOTH);
+     }
+ 
+     public boolean isHistorySection() {
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/views/BrowseView.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/views/BrowseView.java
+index fb078e61f..a0fb8d347 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/views/BrowseView.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/views/BrowseView.java
+@@ -12,6 +12,7 @@ public interface BrowseView {
+     void removeAllSections();
+     void selectSection(int index, boolean focusOnContent);
+     void updateSection(VideoGroup group);
++    default boolean showYouTubeHome() { return true; }
+     void updateSection(SettingsGroup group);
+     void clearSection(BrowseSection section);
+     void selectSectionItem(int index);
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java
-index 5e3ed03..ac02986 100644
+index 5e3ed0317..ac0298688 100644
 --- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java
 +++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java
 @@ -1,6 +1,7 @@
@@ -26,10 +125,10 @@ index 5e3ed03..ac02986 100644
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index 51c0242..0ae146f 100644
+index 93c0d576f..80e9de7c0 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
-@@ -208,6 +216,8 @@ dependencies {
+@@ -216,6 +216,8 @@ dependencies {
      //////// BEGIN EXOPLAYER /////////
  
      implementation project(':exoplayer-library-core')
@@ -39,7 +138,7 @@ index 51c0242..0ae146f 100644
      implementation project(':exoplayer-extension-leanback')
      implementation project(':exoplayer-extension-mediasession')
 diff --git a/smarttubetv/src/main/AndroidManifest.xml b/smarttubetv/src/main/AndroidManifest.xml
-index b2916c4..81acbb3 100644
+index b2916c4f0..81acbb347 100644
 --- a/smarttubetv/src/main/AndroidManifest.xml
 +++ b/smarttubetv/src/main/AndroidManifest.xml
 @@ -177,6 +177,18 @@
@@ -63,10 +162,10 @@ index b2916c4..81acbb3 100644
              android:launchMode="singleInstance"
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatHubActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatHubActivity.java
 new file mode 100644
-index 0000000..0f731d4
+index 000000000..b40d7b006
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatHubActivity.java
-@@ -0,0 +1,587 @@
+@@ -0,0 +1,592 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.app.Activity;
@@ -423,6 +522,9 @@ index 0000000..0f731d4
 +        } else if (!query.isEmpty()) {
 +            pending++;
 +            sync.rumbleSearch(query, response -> appendRumble(response, serial));
++        } else if (!subscriptions) {
++            pending++;
++            sync.rumbleHome(response -> appendRumble(response, serial));
 +        } else {
 +            JSONArray channels = sync.followedChannels();
 +            int count = Math.min(10, channels.length());
@@ -445,7 +547,9 @@ index 0000000..0f731d4
 +                JSONObject value = videos.optJSONObject(i);
 +                if (value != null && ids.add(value.optString("id"))) rumble.add(new Item(value));
 +            }
-+        } else if (response.code == 503) toast(response.message);
++        } else if ("rumble".equals(sync.sourceFilter()) || !selectedChannel.isEmpty()) {
++            toast(response.message);
++        }
 +        rebuild(serial);
 +        done(serial);
 +    }
@@ -654,15 +758,74 @@ index 0000000..0f731d4
 +        @Override public int getItemCount() { return visible.size(); }
 +    }
 +}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
+new file mode 100644
+index 000000000..b8e99bc43
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
+@@ -0,0 +1,52 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import android.content.Context;
++import android.content.Intent;
++
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.ArrayList;
++import java.util.List;
++
++public final class PatRumbleCards {
++    private static final String PREFIX = "rumble:";
++
++    private PatRumbleCards() { }
++
++    public static List<Video> from(JSONObject payload, PatSyncClient sync) {
++        List<Video> cards = new ArrayList<>();
++        JSONArray results = payload.optJSONArray("videos");
++        if (results == null) return cards;
++        for (int i = 0; i < results.length(); i++) {
++            JSONObject item = results.optJSONObject(i);
++            if (item == null || item.optString("url").isEmpty()) continue;
++            String id = item.optString("id");
++            if (id.isEmpty()) continue;
++            Video card = new Video();
++            card.videoId = PREFIX + id;
++            card.title = item.optString("title");
++            card.author = item.optString("channelName", "Rumble");
++            card.cardImageUrl = item.optString("thumbnail");
++            card.secondTitle = "Rumble";
++            card.isLive = item.optBoolean("live", false);
++            card.description = item.toString();
++            long duration = item.optLong("durationMs", 0);
++            long resume = sync.resumePosition(id);
++            if (duration > 0 && resume > 0) card.percentWatched = 100f * resume / duration;
++            cards.add(card);
++        }
++        return cards;
++    }
++
++    public static boolean isRumble(Video video) {
++        return video.videoId != null && video.videoId.startsWith(PREFIX);
++    }
++
++    public static void open(Context context, Video card) {
++        context.startActivity(new Intent(context, PatRumblePlayerActivity.class)
++                .putExtra(PatRumblePlayerActivity.EXTRA_VIDEO, card.description));
++    }
++}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
 new file mode 100644
-index 0000000..4f2b27c
+index 000000000..ff290908f
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
-@@ -0,0 +1,247 @@
+@@ -0,0 +1,259 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.app.Activity;
++import android.media.AudioManager;
 +import android.graphics.Color;
 +import android.net.Uri;
 +import android.os.Bundle;
@@ -677,7 +840,9 @@ index 0000000..4f2b27c
 +import android.widget.TextView;
 +import android.widget.Toast;
 +
++import com.google.android.exoplayer2.C;
 +import com.google.android.exoplayer2.DefaultLoadControl;
++import com.google.android.exoplayer2.audio.AudioAttributes;
 +import com.google.android.exoplayer2.ExoPlaybackException;
 +import com.google.android.exoplayer2.ExoPlayerFactory;
 +import com.google.android.exoplayer2.Player;
@@ -721,6 +886,7 @@ index 0000000..4f2b27c
 +
 +    @Override protected void onCreate(Bundle savedInstanceState) {
 +        super.onCreate(savedInstanceState);
++        setVolumeControlStream(AudioManager.STREAM_MUSIC);
 +        sync = new PatSyncClient(this);
 +        try { video = new JSONObject(getIntent().getStringExtra(EXTRA_VIDEO)); }
 +        catch (Exception ignored) { finish(); return; }
@@ -816,6 +982,14 @@ index 0000000..4f2b27c
 +                .setBufferDurationsMs(30_000, 90_000, 3_000, 7_000).createDefaultLoadControl();
 +        player = ExoPlayerFactory.newSimpleInstance(this, new com.google.android.exoplayer2.DefaultRenderersFactory(this),
 +                new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(), load);
++        AudioAttributes audio = new AudioAttributes.Builder()
++                .setUsage(C.USAGE_MEDIA).setContentType(C.CONTENT_TYPE_MOVIE).build();
++        try {
++            player.setAudioAttributes(audio, true);
++        } catch (SecurityException ignored) {
++            // Some Android TV builds deny audio focus even for foreground players.
++            player.setAudioAttributes(audio, false);
++        }
 +        view.setPlayer(player);
 +        player.addListener(new Player.EventListener() {
 +            @Override public void onPlayerStateChanged(boolean playWhenReady, int state) {
@@ -909,10 +1083,10 @@ index 0000000..4f2b27c
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
 new file mode 100644
-index 0000000..055c5b4
+index 000000000..9e986772a
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,496 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.content.Context;
@@ -1354,8 +1528,52 @@ index 0000000..055c5b4
 +                "GET", null, prefs.getString("token", "")), done);
 +    }
 +
++    public void rumbleHome(Callback done) {
++        enqueue(() -> {
++            String token = prefs.getString("token", "");
++            if (token.isEmpty()) return new Result(401, null, "Connect this device in Rumble sync settings");
++            JSONArray channels = followedChannels();
++            if (channels.length() == 0) return request("/v1/rumble/live", "GET", null, token);
++
++            JSONArray videos = new JSONArray();
++            Set<String> seen = new HashSet<>();
++            Result failure = null;
++            for (int i = 0; i < Math.min(10, channels.length()); i++) {
++                JSONObject channel = channels.optJSONObject(i);
++                String id = channel == null ? "" : channel.optString("id");
++                if (id.isEmpty()) continue;
++                String url = id.startsWith("https://rumble.com/") ? id :
++                        "https://rumble.com/c/" + id.replaceAll("[^A-Za-z0-9_-]", "");
++                Result feed;
++                try {
++                    feed = request(rumbleChannelPath(url), "GET", null, token);
++                } catch (Exception error) {
++                    failure = new Result(0, null, "Couldn't reach the Rumble server");
++                    continue;
++                }
++                if (!feed.ok()) {
++                    failure = feed;
++                    if (feed.code == 401 || feed.code == 429) break;
++                    continue;
++                }
++                JSONArray items = feed.data.optJSONArray("videos");
++                if (items == null) continue;
++                for (int j = 0; j < items.length(); j++) {
++                    JSONObject item = items.optJSONObject(j);
++                    if (item != null && seen.add(item.optString("id"))) videos.put(item);
++                }
++            }
++            return videos.length() == 0 && failure != null ? failure :
++                    new Result(200, new JSONObject().put("videos", videos), "OK");
++        }, done);
++    }
++
++    private static String rumbleChannelPath(String url) throws java.io.UnsupportedEncodingException {
++        return "/v1/rumble/channel?url=" + java.net.URLEncoder.encode(url, "UTF-8");
++    }
++
 +    public void rumbleChannel(String channelUrl, Callback done) {
-+        enqueue(() -> request("/v1/rumble/channel?url=" + java.net.URLEncoder.encode(channelUrl, "UTF-8"),
++        enqueue(() -> request(rumbleChannelPath(channelUrl),
 +                "GET", null, prefs.getString("token", "")), done);
 +    }
 +
@@ -1366,7 +1584,7 @@ index 0000000..055c5b4
 +    }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-index ee6b2ce..33e7c57 100644
+index ee6b2ce4d..39eaa2da4 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 @@ -51,6 +51,9 @@ import com.liskovsoft.mediaserviceinterfaces.SignInService;
@@ -1374,7 +1592,7 @@ index ee6b2ce..33e7c57 100644
  import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
  import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 +import com.liskovsoft.smartyoutubetv2.mobile.sync.PatHubActivity;
-+import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumblePlayerActivity;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleCards;
 +import com.liskovsoft.smartyoutubetv2.mobile.sync.PatSyncClient;
  import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
  import com.liskovsoft.smartyoutubetv2.tv.R;
@@ -1394,51 +1612,56 @@ index ee6b2ce..33e7c57 100644
      private static final int SECONDARY = Color.rgb(170, 170, 170);
      private static final int ACCENT = Color.rgb(255, 35, 35);
 -    private static final int MOBILE_VERSION = 13;
-+    private static final int MOBILE_VERSION = 14;
++    private static final int MOBILE_VERSION = 15;
      private static final String MOBILE_PREFERENCES = "smarttube_mobile";
      private static final String HIDE_HOME_SHORTS = "hide_home_shorts";
      private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
-@@ -102,6 +108,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -102,6 +108,11 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
      private final CompositeDisposable curatedActions = new CompositeDisposable();
      private final CompositeDisposable signInActions = new CompositeDisposable();
      private MobileUpdater mobileUpdater;
 +    private PatSyncClient patSync;
 +    private String lastPatFilter;
-+    private int lastPatChannelCount;
++    private String lastPatChannels;
++    private boolean lastPatPaired;
++    private int rumbleHomeRequest;
      // The mobile shell owns the initial Home feed. Ignore the TV presenter's
      // initial section render to avoid showing an unrelated feed first.
      private boolean curatedMode = true;
-@@ -112,6 +121,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -112,6 +123,10 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
      protected void onCreate(Bundle state) {
          super.onCreate(state);
          mobileUpdater = new MobileUpdater(this, MOBILE_VERSION);
 +        patSync = new PatSyncClient(this);
 +        lastPatFilter = patSync.sourceFilter();
-+        lastPatChannelCount = patSync.followedChannels().length();
++        lastPatChannels = patSync.followedChannels().toString();
++        lastPatPaired = patSync.paired();
          buildUi();
          presenter = BrowsePresenter.instance(this);
          presenter.setView(this);
-@@ -123,6 +135,27 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -123,6 +138,29 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
      @Override
      protected void onResume() {
          super.onResume();
 +        if (patSync != null) {
 +            String filter = patSync.sourceFilter();
-+            int followed = patSync.followedChannels().length();
-+            if ((!filter.equals(lastPatFilter) || followed != lastPatChannelCount) &&
++            String followed = patSync.followedChannels().toString();
++            boolean paired = patSync.paired();
++            if ((!filter.equals(lastPatFilter) || !followed.equals(lastPatChannels) || paired != lastPatPaired) &&
 +                    (activeTab == Tab.HOME || activeTab == Tab.SUBSCRIPTIONS)) {
 +                lastPatFilter = filter;
-+                lastPatChannelCount = followed;
++                lastPatChannels = followed;
++                lastPatPaired = paired;
 +                loadCuratedFeed(activeTab == Tab.SUBSCRIPTIONS);
 +            }
 +            if (patSync.paired()) patSync.syncNow(result -> {
 +                if (!result.ok() || isFinishing()) return;
 +                String remoteFilter = patSync.sourceFilter();
-+                int remoteChannels = patSync.followedChannels().length();
-+                if ((!remoteFilter.equals(lastPatFilter) || remoteChannels != lastPatChannelCount) &&
++                String remoteChannels = patSync.followedChannels().toString();
++                if ((!remoteFilter.equals(lastPatFilter) || !remoteChannels.equals(lastPatChannels)) &&
 +                        (activeTab == Tab.HOME || activeTab == Tab.SUBSCRIPTIONS)) {
 +                    lastPatFilter = remoteFilter;
-+                    lastPatChannelCount = remoteChannels;
++                    lastPatChannels = remoteChannels;
 +                    loadCuratedFeed(activeTab == Tab.SUBSCRIPTIONS);
 +                }
 +            });
@@ -1446,23 +1669,31 @@ index ee6b2ce..33e7c57 100644
          if (mobileUpdater != null) mobileUpdater.onResume();
          if (presenter != null) {
              presenter.setView(this);
-@@ -409,6 +442,15 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -409,6 +447,23 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
                  subscriptionsOnly ? "Subscriptions" : "Home");
          progress.setVisibility(View.VISIBLE);
  
 +        String filter = patSync.sourceFilter();
-+        if (!"youtube".equals(filter)) loadRumbleMobileVideos(subscriptionsOnly);
++        int homeRequest = ++rumbleHomeRequest;
++        if (!"youtube".equals(filter)) {
++            if (subscriptionsOnly) loadRumbleMobileVideos(true);
++            else patSync.rumbleHome(result -> {
++                if (activeTab != Tab.HOME || homeRequest != rumbleHomeRequest) return;
++                if (result.ok()) showRumbleResponse(result.data);
++                else if ("rumble".equals(filter)) showEmpty(result.message, false);
++            });
++        }
 +        if ("rumble".equals(filter)) {
 +            progress.setVisibility(View.GONE);
-+            if (patSync.followedChannels().length() == 0)
-+                showEmpty("Follow Rumble channels in Settings → Rumble + Bunny sync, or search for videos.", false);
++            if (subscriptionsOnly && patSync.followedChannels().length() == 0)
++                showEmpty("Follow Rumble channels in Rumble sync settings.", false);
 +            return;
 +        }
 +
          if (subscriptionsOnly) {
              if (signInService().isSigned()) {
                  loadAccountSubscriptions();
-@@ -420,6 +462,55 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -420,6 +475,37 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
          }
      }
  
@@ -1487,25 +1718,7 @@ index ee6b2ce..33e7c57 100644
 +    }
 +
 +    private void showRumbleResponse(JSONObject payload) {
-+        JSONArray results = payload.optJSONArray("videos");
-+        if (results == null) return;
-+        List<Video> found = new ArrayList<>();
-+        for (int i = 0; i < results.length(); i++) {
-+            JSONObject item = results.optJSONObject(i);
-+            if (item == null || TextUtils.isEmpty(item.optString("url"))) continue;
-+            Video card = new Video();
-+            card.videoId = "rumble:" + item.optString("id");
-+            card.title = item.optString("title");
-+            card.author = item.optString("channelName", "Rumble");
-+            card.cardImageUrl = item.optString("thumbnail");
-+            card.secondTitle = "Rumble";
-+            card.isLive = item.optBoolean("live", false);
-+            card.description = item.toString();
-+            long duration = item.optLong("durationMs", 0);
-+            long resume = patSync.resumePosition(item.optString("id"));
-+            if (duration > 0 && resume > 0) card.percentWatched = 100f * resume / duration;
-+            found.add(card);
-+        }
++        List<Video> found = PatRumbleCards.from(payload, patSync);
 +        if (!found.isEmpty()) {
 +            adapter.appendRumbleVideos(found);
 +            emptyPanel.setVisibility(View.GONE);
@@ -1518,7 +1731,15 @@ index ee6b2ce..33e7c57 100644
      /** Load YouTube's actual Home recommendations once, preserving their order. */
      private void loadYouTubeHome() {
          final boolean hideShorts = hideShortsOnHome();
-@@ -578,6 +669,14 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -466,6 +552,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+     }
+ 
+     private void showHomeUnavailable() {
++        if (adapter.getItemCount() > 0) return;
+         if (!signInService().isSigned())
+             showEmpty("Connect your YouTube account to see personalized Home recommendations.", true);
+         else
+@@ -578,6 +665,14 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
          progress.setVisibility(View.VISIBLE);
          ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
                  .hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
@@ -1533,7 +1754,7 @@ index ee6b2ce..33e7c57 100644
          curatedActions.add(YouTubeServiceManager.instance().getContentService()
                  .getSearchObserve(query, SearchOptions.TYPE_VIDEO)
                  .subscribe(groups -> {
-@@ -662,6 +761,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -662,6 +757,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
              });
          }
          addSettingsHeading("Home screen");
@@ -1543,7 +1764,7 @@ index ee6b2ce..33e7c57 100644
          addSettingsToggle("Hide Shorts on Home", "Keep YouTube Shorts out of Home recommendations",
                  hideShortsOnHome(), (button, checked) -> getSharedPreferences(MOBILE_PREFERENCES, MODE_PRIVATE)
                          .edit().putBoolean(HIDE_HOME_SHORTS, checked).apply());
-@@ -976,6 +1078,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -976,6 +1074,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
          private final List<Video> videos = new ArrayList<>();
          private final List<Video> subscriptionVideos = new ArrayList<>();
          private final List<Video> recommendedVideos = new ArrayList<>();
@@ -1551,7 +1772,7 @@ index ee6b2ce..33e7c57 100644
  
          /** One atomic Home update: no subscription insertion or age-based resorting. */
          void setHomeVideos(List<Video> picks) {
-@@ -983,9 +1086,33 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -983,9 +1082,33 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
              subscriptionVideos.clear();
              recommendedVideos.clear();
              videos.addAll(picks);
@@ -1585,7 +1806,7 @@ index ee6b2ce..33e7c57 100644
          void appendHomePage(VideoGroup group) {
              if (group == null || group.getVideos() == null) return;
              boolean hideShorts = hideShortsOnHome();
-@@ -1001,7 +1128,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -1001,7 +1124,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
                      changed = true;
                  }
              }
@@ -1594,7 +1815,7 @@ index ee6b2ce..33e7c57 100644
          }
  
          void apply(VideoGroup group) {
-@@ -1010,10 +1137,11 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -1010,10 +1133,11 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
              if (group.getAction() == VideoGroup.ACTION_REMOVE) videos.removeAll(group.getVideos());
              else if (group.getAction() == VideoGroup.ACTION_PREPEND) videos.addAll(0, group.getVideos());
              else videos.addAll(group.getVideos());
@@ -1607,7 +1828,7 @@ index ee6b2ce..33e7c57 100644
          void appendCurated(VideoGroup group, int limit, boolean subscription, boolean subscriptionsOnly) {
              appendCurated(group, limit, subscription, subscriptionsOnly, true);
          }
-@@ -1042,6 +1170,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -1042,6 +1166,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
                      if (rec < recommendedVideos.size()) videos.add(recommendedVideos.get(rec++));
                  }
              }
@@ -1615,15 +1836,14 @@ index ee6b2ce..33e7c57 100644
              notifyDataSetChanged();
          }
          long videoAge(Video video) {
-@@ -1163,8 +1292,26 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+@@ -1163,8 +1288,25 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
                  watchedFill.setScaleX(Math.min(100f, watched) / 100f);
              }
              Glide.with(image).load(video.cardImageUrl).placeholder(R.drawable.movie).into(image);
 -            itemView.setOnClickListener(v -> presenter.onVideoItemClicked(video));
 -            itemView.setOnLongClickListener(v -> { presenter.onVideoItemLongClicked(video); return true; });
-+            if (video.videoId != null && video.videoId.startsWith("rumble:")) {
-+                itemView.setOnClickListener(v -> startActivity(new Intent(MobileBrowseActivity.this,
-+                        PatRumblePlayerActivity.class).putExtra(PatRumblePlayerActivity.EXTRA_VIDEO, video.description)));
++            if (PatRumbleCards.isRumble(video)) {
++                itemView.setOnClickListener(v -> PatRumbleCards.open(MobileBrowseActivity.this, video));
 +                itemView.setOnLongClickListener(v -> {
 +                    try {
 +                        JSONObject rumble = new JSONObject(video.description);
@@ -1643,4 +1863,199 @@ index ee6b2ce..33e7c57 100644
 +            }
          }
      }
+ 
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
+index 648aa8d42..b5291a1f0 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
+@@ -7,6 +7,7 @@ import android.os.Looper;
+ import android.view.LayoutInflater;
+ import android.view.View;
+ import android.view.ViewGroup;
++import android.widget.Toast;
+ 
+ import androidx.annotation.NonNull;
+ import androidx.core.content.ContextCompat;
+@@ -22,6 +23,7 @@ import androidx.leanback.widget.Presenter;
+ import androidx.leanback.widget.PresenterSelector;
+ import androidx.leanback.widget.TitleHelper;
+ import com.liskovsoft.sharedutils.helpers.Helpers;
++import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.BrowseSection;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsGroup;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+@@ -33,13 +35,17 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
+ import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
+ import com.liskovsoft.smartyoutubetv2.common.misc.CrashRestorer;
+ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleCards;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatSyncClient;
+ import com.liskovsoft.smartyoutubetv2.tv.R;
+ import com.liskovsoft.smartyoutubetv2.tv.presenter.IconHeaderItemPresenter;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.browse.dialog.ErrorDialogFragment;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.headers.ExtendedHeadersSupportFragment;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.misc.ProgressBarManager;
+ 
++import java.util.Collections;
+ import java.util.HashMap;
++import java.util.List;
+ import java.util.Map;
+ 
+ /*
+@@ -56,6 +62,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+     private boolean mIsFragmentCreated;
+     private boolean mFocusOnContent;
+     private CrashRestorer mCrashRestorer;
++    private PatSyncClient mPatSync;
++    private int mRumbleRequest;
++    private String mHomeSource;
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+@@ -66,6 +75,9 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+         }
+         
+         mCrashRestorer = new CrashRestorer(getContext(), savedInstanceState);
++        if ("app.smarttube.pattv".equals(requireContext().getPackageName())) {
++            mPatSync = new PatSyncClient(requireContext());
++        }
+         mIsFragmentCreated = true;
+ 
+         mSections = new HashMap<>();
+@@ -236,7 +248,7 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+     }
+ 
+     private int getSelectedHeaderId() {
+-        if (getSelectedPosition() >= mSectionRowAdapter.size()) {
++        if (getSelectedPosition() < 0 || getSelectedPosition() >= mSectionRowAdapter.size()) {
+             return -1;
+         }
+ 
+@@ -309,12 +321,62 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+     @Override
+     public void updateSection(VideoGroup group) {
+         restoreMainFragment();
+-
++        BrowseSection section = group == null ? null : group.getSection();
++        if (mPatSync != null && section != null && group.getPosition() >= 0 &&
++                (section.getId() == BrowsePresenter.PAT_BOTH ||
++                 section.getId() == MediaGroup.TYPE_HOME && "both".equals(mPatSync.sourceFilter()))) {
++            // Keep the Rumble row visible even if YouTube's rows arrive later.
++            group.setPosition(group.getPosition() + 1);
++        }
+         mSectionFragmentFactory.updateCurrentFragment(group);
++        if (mPatSync != null && section != null && group.getAction() == VideoGroup.ACTION_REPLACE && group.isEmpty()) {
++            if (section.getId() == MediaGroup.TYPE_HOME) mHomeSource = mPatSync.sourceFilter();
++            loadRumbleRow(section);
++        }
+ 
+         fixInvisibleSearchOrb();
+     }
+ 
++    @Override
++    public boolean showYouTubeHome() {
++        return mPatSync == null || !"rumble".equals(mPatSync.sourceFilter());
++    }
++
++    private void loadRumbleRow(BrowseSection section) {
++        if (mPatSync == null || section == null) return;
++        int sectionId = section.getId();
++        boolean rumbleOnly = sectionId == BrowsePresenter.PAT_RUMBLE;
++        boolean home = sectionId == MediaGroup.TYPE_HOME;
++        if (!home && !rumbleOnly && sectionId != BrowsePresenter.PAT_BOTH) return;
++        Fragment rows = mSectionFragmentFactory.getCurrentFragment();
++        int request = ++mRumbleRequest;
++        if (home && "youtube".equals(mPatSync.sourceFilter())) {
++            updateRumbleRow(section, Collections.emptyList());
++            return;
++        }
++        mPatSync.rumbleHome(result -> {
++            if (request != mRumbleRequest || getView() == null ||
++                    getSelectedHeaderId() != sectionId || rows != mSectionFragmentFactory.getCurrentFragment()) return;
++            if (result.ok()) {
++                List<Video> cards = PatRumbleCards.from(result.data, mPatSync);
++                updateRumbleRow(section, cards);
++                if (cards.isEmpty() && (rumbleOnly || home && !showYouTubeHome()))
++                    Toast.makeText(requireContext(), "No Rumble videos available", Toast.LENGTH_LONG).show();
++            } else if (rumbleOnly || home && !showYouTubeHome()) {
++                Toast.makeText(requireContext(), result.message, Toast.LENGTH_LONG).show();
++            }
++        });
++    }
++
++    private void updateRumbleRow(BrowseSection section, List<Video> cards) {
++        VideoGroup row = VideoGroup.from(cards, section, 0);
++        row.setId(BrowsePresenter.PAT_RUMBLE);
++        row.setTitle("Rumble");
++        row.setAction(VideoGroup.ACTION_REPLACE);
++        if (!cards.isEmpty()) restoreMainFragment();
++        mSectionFragmentFactory.updateCurrentFragment(row);
++    }
++
+     @Override
+     public void updateSection(SettingsGroup group) {
+         restoreMainFragment();
+@@ -470,6 +532,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+         }
+ 
+         mIsFragmentCreated = false;
++        if (mPatSync != null && mPatSync.paired()) mPatSync.syncNow(result -> {
++            if (!result.ok() || !isResumed()) return;
++            int section = getSelectedHeaderId();
++            if (section == MediaGroup.TYPE_HOME && !mPatSync.sourceFilter().equals(mHomeSource)) {
++                mBrowsePresenter.refresh(false);
++            } else {
++                loadRumbleRow(mSections.get(section));
++            }
++        });
+     }
+ 
+     /**
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
+index ab21c3eb9..5114d6c48 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
+@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
+ import com.liskovsoft.smartyoutubetv2.common.app.presenters.interfaces.VideoGroupPresenter;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleCards;
+ import com.liskovsoft.smartyoutubetv2.tv.adapter.VideoGroupObjectAdapter;
+ import com.liskovsoft.smartyoutubetv2.tv.presenter.ChannelHeaderPresenter;
+ import com.liskovsoft.smartyoutubetv2.tv.presenter.ChannelHeaderPresenter.ChannelHeaderCallback;
+@@ -329,7 +330,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+         public void onItemLongPressed(Presenter.ViewHolder itemViewHolder, Object item) {
+ 
+             if (item instanceof Video) {
+-                mMainPresenter.onVideoItemLongClicked((Video) item);
++                Video video = (Video) item;
++                if (!PatRumbleCards.isRumble(video)) mMainPresenter.onVideoItemLongClicked(video);
+             } else {
+                 Toast.makeText(getActivity(), item.toString(), Toast.LENGTH_SHORT).show();
+             }
+@@ -342,7 +344,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+                                   RowPresenter.ViewHolder rowViewHolder, Row row) {
+ 
+             if (item instanceof Video) {
+-                mMainPresenter.onVideoItemClicked((Video) item);
++                Video video = (Video) item;
++                if (PatRumbleCards.isRumble(video)) PatRumbleCards.open(requireContext(), video);
++                else mMainPresenter.onVideoItemClicked(video);
+             } else {
+                 Toast.makeText(getActivity(), item.toString(), Toast.LENGTH_SHORT).show();
+             }
+@@ -356,9 +360,11 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+             if (item instanceof Video) {
+                 mBackgroundManager.setBackgroundFrom((Video) item);
+ 
+-                mMainPresenter.onVideoItemSelected((Video) item);
+-
+-                checkScrollEnd((Video)item);
++                Video video = (Video) item;
++                if (!PatRumbleCards.isRumble(video)) {
++                    mMainPresenter.onVideoItemSelected(video);
++                    checkScrollEnd(video);
++                }
+             }
+         }
  

@@ -206,6 +206,30 @@ test("Rumble channel discovery rejects arbitrary URLs and needs a server key", a
   assert.equal(noKey.status, 503);
 });
 
+test("Rumble Home can discover live videos before any channels are followed", async () => {
+  const requests = [];
+  const h = harness({
+    rumbleApiKey: "server-only-rumble-key",
+    fetch: async (url) => {
+      requests.push(String(url));
+      return Response.json({ streams: [{
+        id: "v79xhhm", title: "Live event", live: true,
+        url: "https://rumble.com/v79xhhm-live-event.html",
+      }], next_page: 2 });
+    },
+  });
+  assert.equal((await h.request("GET", "/v1/rumble/live")).status, 401);
+  const phone = await h.bootstrap();
+  const token = phone.body.deviceToken;
+  const feed = await h.request("GET", "/v1/rumble/live", undefined, token);
+  assert.equal(feed.status, 200);
+  assert.equal(feed.body.videos[0].id, "v79xhhm");
+  assert.equal(feed.body.videos[0].live, true);
+  assert.equal(feed.body.nextPage, 2);
+  assert.equal((await h.request("GET", "/v1/rumble/live", undefined, token)).body.cached, true);
+  assert.deepEqual(requests, ["https://api.api.sh/rumble/v1/live?page=1"]);
+});
+
 test("Rumble search cards without streams resolve playable media on opening", async () => {
   const requests = [];
   const h = harness({

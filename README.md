@@ -2,10 +2,10 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v14** includes all v13 features, plus:
+Version **v15** includes the mixed Home feed and Rumble audio handling.
 
-- YouTube / Rumble / Both video-source selection. The phone Home and Subs
-  pages merge videos from followed Rumble channels into the existing card grid.
+- **Both** mixes YouTube and Rumble in the Home feed. Rumble uses followed
+  channels or shows live videos when you have no follows.
 - A Rumble player using HTTPS HLS or MP4 with alternate-stream recovery after
   repeated stalls. Local Rumble follows and watched positions are saved.
 - **Settings → Rumble + Bunny sync** opens a shared phone/TV video browser.
@@ -14,14 +14,8 @@ Version **v14** includes all v13 features, plus:
 - Phone-only initial Bunny authorization and 10-digit TV pairing. The phone
   approves the TV; no database token, Rumble API key, or setup secret is
   typed on the TV. Settings, channels/sidebar and Rumble progress can sync.
-  **The Bunny backend must be deployed and activated** before sync and Rumble
-  search will work. See [Bunny setup](bunny-sync/README.md).
-
-**New self-hosting option:** [VPS sync service](vps-sync/README.md) uses a
-private SQLite database on your own server with the same existing phone/TV
-pairing API. It is staged for deployment, not yet enabled for installed APKs.
-The v14/v3 settings still use legacy Bunny labels until a later signed app
-release; no Bunny account is needed to use the VPS service.
+  The hosted [sync service](https://jobhub.asia/health) uses a private SQLite
+  database. The app still labels the settings screen **Rumble + Bunny sync**.
 
 The earlier v13 interface includes:
 
@@ -104,9 +98,10 @@ never pull-request builds. Production builds fail if signing is missing. All
 other builds are explicitly marked debug/test-only.
 
 To publish an update, merge the new version into `main` **after the signing
-secret is configured**. The push automatically creates a `v14` GitHub release
+secret is configured**. The build stages the signed GitHub release as a draft
 with a permanently signed APK. A manual GitHub Actions run on `main` with
-`publish_release=true` can also publish if needed. Future versions must
+`publish_release=true` can also stage the draft. Verify the signing certificate
+before publishing. Future versions must
 increment both `MOBILE_VERSION` and the workflow's release version/tag. The
 updater uses the latest published release, not Actions artifacts.
 
