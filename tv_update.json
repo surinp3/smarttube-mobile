@@ -1,21 +1,21 @@
 {
   "package": {
     "downloadUrlList_armeabi-v7a": [
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v2/SmartTube-Pat-TV-v2-ARMv7.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v3/SmartTube-Pat-TV-v3-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v2/SmartTube-Pat-TV-v2-ARM64.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v3/SmartTube-Pat-TV-v3-ARM64.apk"
     ],
-    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v2/SmartTube-Pat-TV-v2-Universal.apk"
+    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v3/SmartTube-Pat-TV-v3-Universal.apk"
   },
-  "32.69-tv.2": {
-    "versionCode": 3002,
+  "32.69-tv.3": {
+    "versionCode": 3003,
     "changelog": [
-      "Fixes installation on Google TV Streamer with 32-bit Android by including ARMv7 native libraries",
-      "Includes both ARMv7, ARM64, and universal signed APKs for compatibility",
-      "Prefers a direct-stream YouTube TV client with fallbacks for restricted videos",
-      "Uses a larger video buffer and restarts stalled streams with a different client",
-      "Preserves your DNS settings and supports signed in-app updates"
+      "Adds YouTube, Rumble and Both video source selection in the new Rumble + Bunny sync TV settings panel",
+      "Includes a sidebar for locally followed Rumble channels and phone-to-TV pairing with a 10-digit code",
+      "Uses direct HLS/MP4 playback with alternate stream fallback for Rumble videos",
+      "Bunny server and Rumble API activation are required before cloud sync or Rumble discovery works",
+      "Preserves SmartTube YouTube playback, rollback recovery, signed updates and Google TV Streamer-compatible ARMv7/Universal APKs"
     ]
   }
 }

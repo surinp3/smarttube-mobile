@@ -2,7 +2,22 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v13** includes:
+Version **v14** includes all v13 features, plus:
+
+- YouTube / Rumble / Both video-source selection. The phone Home and Subs
+  pages merge videos from followed Rumble channels into the existing card grid.
+- A Rumble player using HTTPS HLS or MP4 with alternate-stream recovery after
+  repeated stalls. Local Rumble follows and watched positions are saved.
+- **Settings → Rumble + Bunny sync** opens a shared phone/TV video browser.
+  On the TV, open **Settings → Rumble + Bunny sync**. It has a D-pad sidebar
+  of followed Rumble channels; long-press a channel to move it up.
+- Phone-only initial Bunny authorization and 10-digit TV pairing. The phone
+  approves the TV; no database token, Rumble API key, or setup secret is
+  typed on the TV. Settings, channels/sidebar and Rumble progress can sync.
+  **The Bunny backend must be deployed and activated** before sync and Rumble
+  search will work. See [Bunny setup](bunny-sync/README.md).
+
+The earlier v13 interface includes:
 
 - **Settings → Home screen → Hide Shorts on Home** (enabled by default).
   Removes Shorts from YouTube's Home recommendations, including paginated
@@ -39,7 +54,8 @@ Version **v13** includes:
 ## Build
 
 GitHub Actions builds the ARM64 APK from a pinned upstream SmartTube commit
-plus [mobile.patch](mobile.patch) and [mediaservice.patch](mediaservice.patch),
+plus [mobile.patch](mobile.patch), [pat-sync.patch](pat-sync.patch)
+and [mediaservice.patch](mediaservice.patch),
 which are kept compatible with that commit and its MediaServiceCore submodule.
 
 **Install production APKs only from [GitHub Releases](https://github.com/surinp3/smarttube-mobile/releases).**
@@ -82,7 +98,7 @@ never pull-request builds. Production builds fail if signing is missing. All
 other builds are explicitly marked debug/test-only.
 
 To publish an update, merge the new version into `main` **after the signing
-secret is configured**. The push automatically creates a `v13` GitHub release
+secret is configured**. The push automatically creates a `v14` GitHub release
 with a permanently signed APK. A manual GitHub Actions run on `main` with
 `publish_release=true` can also publish if needed. Future versions must
 increment both `MOBILE_VERSION` and the workflow's release version/tag. The

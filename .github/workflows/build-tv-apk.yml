@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'tv.patch'
+      - 'pat-sync.patch'
+      - 'mobile.patch'
       - 'tv-mediaservice.patch'
       - 'tv_update.json'
       - 'upstream-pins.json'
@@ -12,6 +14,8 @@ on:
     branches: [main]
     paths:
       - 'tv.patch'
+      - 'pat-sync.patch'
+      - 'mobile.patch'
       - 'tv-mediaservice.patch'
       - 'tv_update.json'
       - 'upstream-pins.json'
@@ -48,6 +52,8 @@ jobs:
           git -C upstream/MediaServiceCore apply ../../mediaservice.patch
           git -C upstream apply --check ../tv.patch
           git -C upstream apply ../tv.patch
+          git -C upstream apply --check ../pat-sync.patch
+          git -C upstream apply ../pat-sync.patch
           git -C upstream/MediaServiceCore apply --check ../../tv-mediaservice.patch
           git -C upstream/MediaServiceCore apply ../../tv-mediaservice.patch
           chmod +x upstream/gradlew
@@ -114,15 +120,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v2-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v2-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v2-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v2-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v3-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v3-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v3-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v3-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v2-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v2-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v2-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v2-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v3-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v3-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v3-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v3-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -143,21 +149,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v2-SIGNED-APKs
+          name: SmartTube-Pat-TV-v3-SIGNED-APKs
           path: output
       - name: Publish production TV release without changing the Mobile latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v2 is already published; increment the TV version for the next release.'
+          if gh release view tv-v3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v3 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v2 \
-              output/SmartTube-Pat-TV-v2-ARMv7.apk \
-              output/SmartTube-Pat-TV-v2-ARM64.apk \
-              output/SmartTube-Pat-TV-v2-Universal.apk \
+            gh release create tv-v3 \
+              output/SmartTube-Pat-TV-v3-ARMv7.apk \
+              output/SmartTube-Pat-TV-v3-ARM64.apk \
+              output/SmartTube-Pat-TV-v3-Universal.apk \
               --repo "$GITHUB_REPOSITORY" \
-              --title 'SmartTube Pat TV v2 (Google TV Streamer compatible)' \
-              --notes 'Signed production release with ARMv7 (32-bit), ARM64 and Universal APKs. Fixes the NO_MATCHING_ABIS installation error seen on Google TV Streamer. For that box use ARMv7 or Universal. Retains direct-stream failover, 40–75s VOD buffer, 12s stall recovery and preserved DNS preferences. Separate from SmartTube Mobile. Not yet tested on the user’s physical device.' \
+              --title 'SmartTube Pat TV v3 — Rumble and Bunny sync' \
+              --notes 'Signed ARMv7, ARM64 and Universal APKs. TV Settings → Rumble + Bunny sync opens the shared video grid and local channel sidebar. Pair using a 10-digit code approved from the phone. Rumble playback has alternate HLS/MP4 sources and buffering recovery; Bunny requires separate activation. The original YouTube player and DNS settings stay intact.' \
               --latest=false
           fi

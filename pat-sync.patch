@@ -1,0 +1,1583 @@
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java
+index 5e3ed03..ac02986 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java
+@@ -1,6 +1,7 @@
+ package com.liskovsoft.smartyoutubetv2.common.misc;
+ 
+ import android.content.Context;
++import android.content.Intent;
+ import com.liskovsoft.sharedutils.helpers.Helpers;
+ import com.liskovsoft.smartyoutubetv2.common.R;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsItem;
+@@ -41,6 +42,14 @@ public class AppDataSourceManager {
+     public List<SettingsItem> getSettingItems(Context context) {
+         List<SettingsItem> settingItems = new ArrayList<>();
+ 
++        // TV edition: the same YouTube/Rumble grid and Bunny account pairing as the phone.
++        if ("app.smarttube.pattv".equals(context.getPackageName())) {
++            settingItems.add(new SettingsItem("Rumble + Bunny sync", () ->
++                    context.startActivity(new Intent().setClassName(context,
++                            "com.liskovsoft.smartyoutubetv2.mobile.sync.PatHubActivity")
++                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)), R.drawable.settings_main_ui));
++        }
++
+         settingItems.add(new SettingsItem(
+                 context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
+         settingItems.add(new SettingsItem(
+diff --git a/smarttubetv/src/main/AndroidManifest.xml b/smarttubetv/src/main/AndroidManifest.xml
+index b2916c4..81acbb3 100644
+--- a/smarttubetv/src/main/AndroidManifest.xml
++++ b/smarttubetv/src/main/AndroidManifest.xml
+@@ -177,6 +177,18 @@
+             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|layoutDirection"
+             android:screenOrientation="unspecified"/>
+ 
++        <activity
++            android:name="com.liskovsoft.smartyoutubetv2.mobile.sync.PatHubActivity"
++            android:exported="false"
++            android:screenOrientation="unspecified"
++            android:theme="@android:style/Theme.Material.NoActionBar"/>
++
++        <activity
++            android:name="com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumblePlayerActivity"
++            android:exported="false"
++            android:screenOrientation="unspecified"
++            android:theme="@android:style/Theme.Material.NoActionBar"/>
++
+         <activity
+             android:name="com.liskovsoft.smartyoutubetv2.tv.ui.channel.ChannelActivity"
+             android:launchMode="singleInstance"
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatHubActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatHubActivity.java
+new file mode 100644
+index 0000000..0f731d4
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatHubActivity.java
+@@ -0,0 +1,587 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Intent;
++import android.graphics.Color;
++import android.graphics.Matrix;
++import android.graphics.drawable.Drawable;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
++import android.text.InputType;
++import android.text.TextUtils;
++import android.view.Gravity;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.EditText;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.ScrollView;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import androidx.annotation.NonNull;
++import androidx.recyclerview.widget.GridLayoutManager;
++import androidx.recyclerview.widget.RecyclerView;
++
++import com.bumptech.glide.Glide;
++import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
++import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions;
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
++import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
++import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.HashSet;
++import java.util.List;
++
++import io.reactivex.Observable;
++import io.reactivex.disposables.CompositeDisposable;
++
++/**
++ * One video-card format for both providers, touchscreen and D-pad navigation.
++ * This also exposes phone-side Bunny authorization and TV code-only pairing.
++ */
++public final class PatHubActivity extends Activity {
++    private static final int BG = Color.rgb(16, 16, 16);
++    private static final int PANEL = Color.rgb(34, 34, 34);
++    private static final int RED = Color.rgb(234, 35, 35);
++    private static final int WHITE = Color.WHITE;
++
++    private final CompositeDisposable actions = new CompositeDisposable();
++    private final Handler ui = new Handler(Looper.getMainLooper());
++    private final List<Item> youtube = new ArrayList<>();
++    private final List<Item> rumble = new ArrayList<>();
++    private final List<Item> visible = new ArrayList<>();
++    private PatSyncClient sync;
++    private RecyclerView cards;
++    private CardAdapter adapter;
++    private TextView info;
++    private LinearLayout sidebar;
++    private EditText searchBox;
++    private Button ytButton;
++    private Button rumbleButton;
++    private Button bothButton;
++    private boolean tv;
++    private boolean subscriptions;
++    private String query = "";
++    private String selectedChannel = "";
++    private int generation;
++    private int pending;
++
++    private static final class Item {
++        final Video youtube;
++        final JSONObject rumble;
++        Item(Video value) { youtube = value; rumble = null; }
++        Item(JSONObject value) { youtube = null; rumble = value; }
++        boolean isRumble() { return rumble != null; }
++        String title() { return isRumble() ? rumble.optString("title") : youtube.title; }
++        String thumbnail() { return isRumble() ? rumble.optString("thumbnail") : youtube.cardImageUrl; }
++        String channel() { return isRumble() ? rumble.optString("channelName", "Rumble") : youtube.getAuthor(); }
++    }
++
++    /** Keeps the top of portrait thumbnails visible instead of centering the crop. */
++    private static final class TopCropView extends ImageView {
++        private final Matrix crop = new Matrix();
++        TopCropView(android.content.Context context) {
++            super(context);
++            setScaleType(ScaleType.MATRIX);
++        }
++        @Override public void setImageDrawable(Drawable drawable) {
++            super.setImageDrawable(drawable);
++            if (crop != null) updateCrop();
++        }
++        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
++            super.onSizeChanged(w, h, oldw, oldh);
++            updateCrop();
++        }
++        private void updateCrop() {
++            Drawable source = getDrawable();
++            if (source != null && getWidth() > 0 && getHeight() > 0 &&
++                    source.getIntrinsicWidth() > 0 && source.getIntrinsicHeight() > 0) {
++                float scale = Math.max((float) getWidth() / source.getIntrinsicWidth(),
++                        (float) getHeight() / source.getIntrinsicHeight());
++                crop.reset();
++                crop.setScale(scale, scale);
++                crop.postTranslate((getWidth() - source.getIntrinsicWidth() * scale) / 2, 0);
++                setImageMatrix(crop);
++            }
++        }
++    }
++
++    @Override protected void onCreate(Bundle state) {
++        super.onCreate(state);
++        tv = getPackageName().equals("app.smarttube.pattv");
++        sync = new PatSyncClient(this);
++        buildUi();
++        if (sync.paired()) sync.syncNow(result -> { if (result.ok()) loadFeed(); });
++        loadFeed();
++    }
++
++    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
++
++    private Button action(String label, Runnable run) {
++        Button button = new Button(this);
++        button.setAllCaps(false);
++        button.setText(label);
++        button.setTextColor(WHITE);
++        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(PANEL));
++        button.setOnClickListener(v -> run.run());
++        button.setFocusable(true);
++        return button;
++    }
++
++    private void buildUi() {
++        LinearLayout root = new LinearLayout(this);
++        root.setBackgroundColor(BG);
++        root.setOrientation(LinearLayout.VERTICAL);
++        root.setPadding(dp(tv ? 24 : 8), dp(tv ? 16 : 5), dp(tv ? 24 : 8), dp(8));
++
++        LinearLayout nav = new LinearLayout(this);
++        nav.setGravity(Gravity.CENTER_VERTICAL);
++        TextView title = new TextView(this);
++        title.setText("PatTube");
++        title.setTextSize(tv ? 25 : 21);
++        title.setTextColor(WHITE);
++        title.setTypeface(null, 1);
++        nav.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
++        nav.addView(action("Sync", this::showSyncDialog), new LinearLayout.LayoutParams(-2, -2));
++        root.addView(nav, new LinearLayout.LayoutParams(-1, -2));
++
++        LinearLayout providers = new LinearLayout(this);
++        providers.setGravity(Gravity.CENTER_VERTICAL);
++        ytButton = action("YouTube", () -> chooseProvider("youtube"));
++        rumbleButton = action("Rumble", () -> chooseProvider("rumble"));
++        bothButton = action("Both", () -> chooseProvider("both"));
++        for (Button button : new Button[]{ytButton, rumbleButton, bothButton})
++            providers.addView(button, new LinearLayout.LayoutParams(0, dp(tv ? 58 : 48), 1));
++        root.addView(providers, new LinearLayout.LayoutParams(-1, -2));
++
++        LinearLayout controls = new LinearLayout(this);
++        controls.addView(action("Home", () -> { subscriptions = false; query = ""; selectedChannel = ""; loadFeed(); }),
++                new LinearLayout.LayoutParams(-2, dp(48)));
++        controls.addView(action("Subs", () -> { subscriptions = true; query = ""; selectedChannel = ""; loadFeed(); }),
++                new LinearLayout.LayoutParams(-2, dp(48)));
++        searchBox = new EditText(this);
++        searchBox.setSingleLine(true);
++        searchBox.setHint("Search videos");
++        searchBox.setHintTextColor(Color.GRAY);
++        searchBox.setTextColor(WHITE);
++        searchBox.setTextSize(16);
++        searchBox.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
++        searchBox.setOnEditorActionListener((v, actionId, event) -> {
++            query = searchBox.getText().toString().trim();
++            selectedChannel = "";
++            loadFeed();
++            return true;
++        });
++        controls.addView(searchBox, new LinearLayout.LayoutParams(0, dp(48), 1));
++        controls.addView(action("Go", () -> {
++            query = searchBox.getText().toString().trim();
++            selectedChannel = "";
++            loadFeed();
++        }), new LinearLayout.LayoutParams(-2, dp(48)));
++        root.addView(controls, new LinearLayout.LayoutParams(-1, -2));
++
++        info = new TextView(this);
++        info.setTextColor(Color.LTGRAY);
++        info.setTextSize(14);
++        info.setPadding(dp(8), dp(5), dp(8), dp(5));
++        root.addView(info, new LinearLayout.LayoutParams(-1, -2));
++
++        LinearLayout body = new LinearLayout(this);
++        body.setOrientation(LinearLayout.HORIZONTAL);
++        if (tv) {
++            ScrollView scroll = new ScrollView(this);
++            sidebar = new LinearLayout(this);
++            sidebar.setOrientation(LinearLayout.VERTICAL);
++            scroll.addView(sidebar);
++            body.addView(scroll, new LinearLayout.LayoutParams(dp(220), -1));
++        }
++        cards = new RecyclerView(this);
++        cards.setClipToPadding(false);
++        cards.setPadding(dp(4), dp(5), dp(4), dp(20));
++        cards.setLayoutManager(new GridLayoutManager(this, tv ? 4 :
++                (getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density > 600 ? 3 : 2)));
++        adapter = new CardAdapter();
++        cards.setAdapter(adapter);
++        body.addView(cards, new LinearLayout.LayoutParams(0, -1, 1));
++        root.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
++        setContentView(root);
++        refreshSidebar();
++    }
++
++    private void chooseProvider(String value) {
++        sync.setSourceFilter(value);
++        if (sync.paired()) sync.syncNow(null);
++        loadFeed();
++    }
++
++    private void updateButtons() {
++        String selected = sync.sourceFilter();
++        for (Button button : new Button[]{ytButton, rumbleButton, bothButton}) {
++            String mode = button == ytButton ? "youtube" : button == rumbleButton ? "rumble" : "both";
++            button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mode.equals(selected) ? RED : PANEL));
++        }
++    }
++
++    private void refreshSidebar() {
++        if (sidebar == null) return;
++        sidebar.removeAllViews();
++        sidebar.addView(action("My Rumble channels", () -> { subscriptions = true; query = ""; selectedChannel = ""; loadFeed(); }));
++        sidebar.addView(action("+ Follow URL", this::followChannelUrl));
++        JSONArray followed = sync.followedChannels();
++        List<JSONObject> ordered = new ArrayList<>();
++        for (int i = 0; i < followed.length(); i++) {
++            JSONObject channel = followed.optJSONObject(i);
++            if (channel != null) ordered.add(channel);
++        }
++        Collections.sort(ordered, Comparator.comparingInt(a -> a.optInt("order")));
++        for (JSONObject channel : ordered) {
++            String id = channel.optString("id");
++            String label = channel.optString("name", id);
++            Button button = action(label, () -> {
++                selectedChannel = channelUrl(id);
++                query = "";
++                loadFeed();
++            });
++            button.setOnLongClickListener(v -> {
++                sync.moveFollowedChannel(id, -1);
++                sync.syncNow(null);
++                refreshSidebar();
++                return true;
++            });
++            sidebar.addView(button, new LinearLayout.LayoutParams(-1, dp(60)));
++        }
++        // Follow/unfollow/reorder writes the Rumble sidebar to Bunny.
++        // This menu leaves SmartTube's native YouTube sidebar untouched.
++    }
++
++    private static String channelUrl(String id) {
++        if (id.startsWith("https://rumble.com/c/") || id.startsWith("https://rumble.com/user/")) return id;
++        return "https://rumble.com/c/" + id.replaceAll("[^a-zA-Z0-9_-]", "");
++    }
++
++    private void followChannelUrl() {
++        EditText input = new EditText(this);
++        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
++        input.setHint("https://rumble.com/c/channel");
++        new AlertDialog.Builder(this).setTitle("Follow Rumble channel")
++                .setView(input).setNegativeButton("Cancel", null)
++                .setPositiveButton("Follow", (dialog, which) -> {
++                    String entered = input.getText().toString().trim();
++                    if (!entered.matches("https://rumble\\.com/(c|user)/[A-Za-z0-9_-]{2,100}/?")) {
++                        toast("Enter a Rumble channel URL (rumble.com/c/...)"); return;
++                    }
++                    entered = entered.replaceAll("/$", "");
++                    sync.follow(entered, entered.substring(entered.lastIndexOf('/') + 1), true);
++                    if (sync.paired()) sync.syncNow(null);
++                    selectedChannel = entered;
++                    refreshSidebar();
++                    loadFeed();
++                }).show();
++    }
++
++    private void loadFeed() {
++        actions.clear();
++        int serial = ++generation;
++        youtube.clear();
++        rumble.clear();
++        visible.clear();
++        adapter.notifyDataSetChanged();
++        updateButtons();
++        refreshSidebar();
++        String filter = sync.sourceFilter();
++        boolean showYoutube = !"rumble".equals(filter) && selectedChannel.isEmpty();
++        boolean showRumble = !"youtube".equals(filter) || !selectedChannel.isEmpty();
++        pending = 0;
++        if (showYoutube) loadYoutube(serial);
++        if (showRumble) loadRumble(serial);
++        info.setText(pending > 0 ? "Loading " + filter + " videos…" : "No videos yet");
++    }
++
++    private void loadYoutube(int serial) {
++        pending++;
++        if (!query.isEmpty()) {
++            actions.add(YouTubeServiceManager.instance().getContentService()
++                    .getSearchObserve(query, SearchOptions.TYPE_VIDEO)
++                    .subscribe(groups -> runOnUiThread(() -> { addYoutube(groups, serial); done(serial); }),
++                            error -> runOnUiThread(() -> done(serial))));
++        } else if (subscriptions) {
++            actions.add(YouTubeServiceManager.instance().getContentService()
++                    .getSubscriptionsObserve()
++                    .subscribe(group -> runOnUiThread(() -> {
++                        addYoutube(Collections.singletonList(group), serial);
++                        done(serial);
++                    }), error -> runOnUiThread(() -> done(serial))));
++        } else {
++            actions.add(Observable.fromCallable(() -> YouTubeServiceManager.instance().getContentService().getHome())
++                    .subscribeOn(io.reactivex.schedulers.Schedulers.io())
++                    .subscribe(groups -> runOnUiThread(() -> { addYoutube(groups, serial); done(serial); }),
++                            error -> runOnUiThread(() -> done(serial))));
++        }
++    }
++
++    private void addYoutube(List<MediaGroup> groups, int serial) {
++        if (serial != generation || groups == null) return;
++        HashSet<String> ids = new HashSet<>();
++        for (Item current : youtube) if (current.youtube != null) ids.add(current.youtube.videoId);
++        for (MediaGroup group : groups) {
++            if (group == null || group.getType() == MediaGroup.TYPE_SHORTS) continue;
++            VideoGroup videos = VideoGroup.from(group);
++            if (videos == null || videos.getVideos() == null) continue;
++            for (Video video : videos.getVideos()) {
++                if (video != null && video.videoId != null && !video.isShorts && ids.add(video.videoId))
++                    youtube.add(new Item(video));
++            }
++        }
++        rebuild(serial);
++    }
++
++    private void loadRumble(int serial) {
++        if (!sync.paired()) return;
++        if (!selectedChannel.isEmpty()) {
++            pending++;
++            sync.rumbleChannel(selectedChannel, response -> appendRumble(response, serial));
++        } else if (!query.isEmpty()) {
++            pending++;
++            sync.rumbleSearch(query, response -> appendRumble(response, serial));
++        } else {
++            JSONArray channels = sync.followedChannels();
++            int count = Math.min(10, channels.length());
++            for (int i = 0; i < count; i++) {
++                JSONObject channel = channels.optJSONObject(i);
++                if (channel == null) continue;
++                pending++;
++                sync.rumbleChannel(channelUrl(channel.optString("id")), response -> appendRumble(response, serial));
++            }
++        }
++    }
++
++    private void appendRumble(PatSyncClient.Result response, int serial) {
++        if (serial != generation) return;
++        if (response.ok()) {
++            JSONArray videos = response.data.optJSONArray("videos");
++            HashSet<String> ids = new HashSet<>();
++            for (Item current : rumble) ids.add(current.rumble.optString("id"));
++            if (videos != null) for (int i = 0; i < videos.length(); i++) {
++                JSONObject value = videos.optJSONObject(i);
++                if (value != null && ids.add(value.optString("id"))) rumble.add(new Item(value));
++            }
++        } else if (response.code == 503) toast(response.message);
++        rebuild(serial);
++        done(serial);
++    }
++
++    private void rebuild(int serial) {
++        if (serial != generation) return;
++        visible.clear();
++        if ("youtube".equals(sync.sourceFilter())) visible.addAll(youtube);
++        else if ("rumble".equals(sync.sourceFilter()) || !selectedChannel.isEmpty()) visible.addAll(rumble);
++        else {
++            // Same shape for both providers, with neither feed buried underneath the other.
++            int y = 0, r = 0;
++            while (y < youtube.size() || r < rumble.size()) {
++                for (int n = 0; n < 2 && y < youtube.size(); n++) visible.add(youtube.get(y++));
++                if (r < rumble.size()) visible.add(rumble.get(r++));
++            }
++        }
++        adapter.notifyDataSetChanged();
++        if (!visible.isEmpty()) info.setText(visible.size() + " videos • " + sync.sourceFilter());
++    }
++
++    private void done(int serial) {
++        if (serial != generation) return;
++        pending = Math.max(0, pending - 1);
++        if (pending == 0 && visible.isEmpty()) {
++            info.setText(sync.sourceFilter().equals("rumble") && sync.followedChannels().length() == 0 && query.isEmpty()
++                    ? "Follow a Rumble channel or use Search to see videos."
++                    : "No videos available. Check the connection or try Search.");
++        }
++    }
++
++    private void open(Item item) {
++        if (!item.isRumble()) PlaybackPresenter.instance(this).openVideo(item.youtube);
++        else startActivity(new Intent(this, PatRumblePlayerActivity.class)
++                .putExtra(PatRumblePlayerActivity.EXTRA_VIDEO, item.rumble.toString()));
++    }
++
++    private void toast(String value) { Toast.makeText(this, value, Toast.LENGTH_LONG).show(); }
++
++    private void showSyncDialog() {
++        if (!sync.paired()) {
++            if (tv) startTvPairing();
++            else startPhoneAuthorization();
++            return;
++        }
++        String[] choices = tv
++                ? new String[]{"Sync now", "Disconnect this TV"}
++                : new String[]{"Sync now", "Link Google TV", "Change Bunny server", "Disconnect this phone"};
++        new AlertDialog.Builder(this).setTitle("Bunny sync")
++                .setItems(choices, (dialog, index) -> {
++                    if (index == 0) sync.syncNow(result -> {
++                        toast(result.message);
++                        if (result.ok()) loadFeed();
++                    });
++                    else if (!tv && index == 1) approveTvPairing();
++                    else if (!tv && index == 2) promptServerUrl(() -> startPhoneAuthorization());
++                    else {
++                        sync.clearPairing();
++                        toast("Device disconnected");
++                    }
++                }).show();
++    }
++
++    private void promptServerUrl(Runnable onSaved) {
++        EditText server = new EditText(this);
++        server.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
++        server.setText(sync.endpoint());
++        server.setHint("https://your-edge-script.bunny...");
++        new AlertDialog.Builder(this).setTitle("Bunny Edge Script URL")
++                .setMessage("This is the public HTTPS endpoint, not the private database URL or token.")
++                .setView(server).setNegativeButton("Cancel", null)
++                .setPositiveButton("Continue", (dialog, which) -> {
++                    try { sync.configureEndpoint(server.getText().toString()); onSaved.run(); }
++                    catch (Exception error) { toast(error.getMessage()); }
++                }).show();
++    }
++
++    private void startPhoneAuthorization() {
++        // Phone can load an already-published endpoint from sync_config.json.
++        if (sync.endpoint().isEmpty()) {
++            promptServerUrl(this::askSetupCode);
++        } else askSetupCode();
++    }
++
++    private void askSetupCode() {
++        EditText code = new EditText(this);
++        code.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++        code.setSingleLine(true);
++        new AlertDialog.Builder(this).setTitle("Authorize this phone")
++                .setMessage("Enter your Bunny sync setup code once. It is never stored or sent to the TV.")
++                .setView(code).setNegativeButton("Cancel", null)
++                .setPositiveButton("Connect", (dialog, which) -> sync.authorizePhone(code.getText().toString(), result -> {
++                    code.setText("");
++                    toast(result.message);
++                    if (result.ok()) loadFeed();
++                })).show();
++    }
++
++    private void approveTvPairing() {
++        EditText code = new EditText(this);
++        code.setInputType(InputType.TYPE_CLASS_NUMBER);
++        code.setSingleLine(true);
++        code.setHint("10-digit code on TV");
++        new AlertDialog.Builder(this).setTitle("Link TV to your Bunny account")
++                .setView(code).setNegativeButton("Cancel", null)
++                .setPositiveButton("Approve", (dialog, which) ->
++                        sync.approvePairing(code.getText().toString(), result -> toast(result.message)))
++                .show();
++    }
++
++    private void startTvPairing() {
++        sync.startPairing(result -> {
++            if (!result.ok()) { toast(result.message); return; }
++            String code = result.data.optString("code");
++            final boolean[] open = {true};
++            AlertDialog popup = new AlertDialog.Builder(this).setTitle("Link this Google TV")
++                    .setMessage("On the PHONE: PatTube → Sync → Link Google TV\n\nEnter code: " + code +
++                            "\n\nWaiting for your phone… (expires in 5 minutes)")
++                    .setNegativeButton("Cancel", (dialog, which) -> open[0] = false)
++                    .create();
++            popup.setOnDismissListener(dialog -> open[0] = false);
++            popup.show();
++            Runnable poll = new Runnable() {
++                @Override public void run() {
++                    if (!open[0] || isFinishing()) return;
++                    sync.pairingStatus(status -> {
++                        if (!open[0]) return;
++                        if (status.ok() && sync.paired()) {
++                            open[0] = false;
++                            popup.dismiss();
++                            toast("TV connected and synchronized");
++                            loadFeed();
++                        } else if (status.code == 410) {
++                            open[0] = false;
++                            popup.dismiss();
++                            toast("Code expired. Start pairing again.");
++                        } else ui.postDelayed(this, 3_000);
++                    });
++                }
++            };
++            ui.post(poll);
++        });
++    }
++
++    @Override protected void onResume() {
++        super.onResume();
++        if (sync != null && cards != null && sync.paired())
++            sync.syncNow(result -> { if (result.ok()) { updateButtons(); refreshSidebar(); } });
++    }
++
++    @Override protected void onDestroy() {
++        generation++;
++        actions.clear();
++        ui.removeCallbacksAndMessages(null);
++        super.onDestroy();
++    }
++
++    private final class CardAdapter extends RecyclerView.Adapter<CardAdapter.Holder> {
++        final class Holder extends RecyclerView.ViewHolder {
++            final ImageView image;
++            final TextView title;
++            final TextView channel;
++            Holder(View view, ImageView image, TextView title, TextView channel) {
++                super(view);
++                this.image = image; this.title = title; this.channel = channel;
++            }
++        }
++        @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup parent, int type) {
++            LinearLayout card = new LinearLayout(parent.getContext());
++            card.setOrientation(LinearLayout.VERTICAL);
++            card.setPadding(dp(6), dp(6), dp(6), dp(16));
++            card.setFocusable(true);
++            card.setClickable(true);
++            card.setBackgroundColor(PANEL);
++            ImageView image = new TopCropView(parent.getContext());
++            card.addView(image, new LinearLayout.LayoutParams(-1, dp(tv ? 148 : 110)));
++            TextView title = new TextView(parent.getContext());
++            title.setTextColor(WHITE); title.setTextSize(tv ? 17 : 15); title.setMaxLines(2);
++            title.setPadding(dp(5), dp(6), dp(5), dp(1));
++            card.addView(title, new LinearLayout.LayoutParams(-1, -2));
++            TextView channel = new TextView(parent.getContext());
++            channel.setTextColor(Color.LTGRAY); channel.setTextSize(tv ? 14 : 12); channel.setMaxLines(1);
++            channel.setPadding(dp(5), dp(2), dp(5), dp(2));
++            card.addView(channel, new LinearLayout.LayoutParams(-1, -2));
++            return new Holder(card, image, title, channel);
++        }
++        @Override public void onBindViewHolder(@NonNull Holder holder, int index) {
++            Item item = visible.get(index);
++            holder.title.setText(item.title());
++            holder.channel.setText((item.isRumble() ? "Rumble • " : "YouTube • ") + item.channel());
++            Glide.with(holder.image).load(item.thumbnail()).into(holder.image);
++            holder.itemView.setOnClickListener(view -> open(item));
++            holder.itemView.setOnFocusChangeListener((view, focused) -> view.setBackgroundColor(focused ? RED : PANEL));
++            holder.itemView.setOnLongClickListener(view -> {
++                if (item.isRumble()) {
++                    String id = item.rumble.optString("channelUrl", item.rumble.optString("channelId"));
++                    sync.follow(id, item.rumble.optString("channelName", id), !sync.isFollowed(id));
++                    if (sync.paired()) sync.syncNow(null);
++                    refreshSidebar();
++                    toast(sync.isFollowed(id) ? "Following channel" : "Unfollowed channel");
++                    return true;
++                }
++                return false;
++            });
++        }
++        @Override public int getItemCount() { return visible.size(); }
++    }
++}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
+new file mode 100644
+index 0000000..f9508ae
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
+@@ -0,0 +1,203 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import android.app.Activity;
++import android.graphics.Color;
++import android.net.Uri;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
++import android.view.Gravity;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.FrameLayout;
++import android.widget.LinearLayout;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import com.google.android.exoplayer2.DefaultLoadControl;
++import com.google.android.exoplayer2.ExoPlaybackException;
++import com.google.android.exoplayer2.ExoPlayerFactory;
++import com.google.android.exoplayer2.Player;
++import com.google.android.exoplayer2.SimpleExoPlayer;
++import com.google.android.exoplayer2.source.ExtractorMediaSource;
++import com.google.android.exoplayer2.source.MediaSource;
++import com.google.android.exoplayer2.source.hls.HlsMediaSource;
++import com.google.android.exoplayer2.ui.PlayerView;
++import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.util.ArrayList;
++import java.util.HashSet;
++
++/** A proper TV-remote + touchscreen Rumble player, separate from YouTube's extractor. */
++public final class PatRumblePlayerActivity extends Activity {
++    public static final String EXTRA_VIDEO = "rumble_video";
++    private static final int WHITE = Color.WHITE;
++    private final Handler timer = new Handler(Looper.getMainLooper());
++    private final ArrayList<String> streams = new ArrayList<>();
++    private final Runnable checkStall = () -> switchStream("Stream stalled. Trying another quality");
++    private final Runnable savePosition = new Runnable() {
++        @Override public void run() {
++            storeProgress();
++            timer.postDelayed(this, 12_000);
++        }
++    };
++
++    private PatSyncClient sync;
++    private SimpleExoPlayer player;
++    private PlayerView view;
++    private Button follow;
++    private JSONObject video;
++    private int streamIndex;
++    private int retries;
++    private long resumeMs;
++
++    @Override protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        sync = new PatSyncClient(this);
++        try { video = new JSONObject(getIntent().getStringExtra(EXTRA_VIDEO)); }
++        catch (Exception ignored) { finish(); return; }
++        HashSet<String> unique = new HashSet<>();
++        addStream(video.optString("streamUrl"), unique);
++        JSONArray files = video.optJSONArray("files");
++        if (files != null) for (int i = 0; i < files.length(); i++) {
++            JSONObject file = files.optJSONObject(i);
++            if (file != null) addStream(file.optString("url"), unique);
++        }
++        if (streams.isEmpty()) { Toast.makeText(this, "No playable Rumble stream", Toast.LENGTH_LONG).show(); finish(); return; }
++        resumeMs = sync.resumePosition(video.optString("id"));
++
++        LinearLayout page = new LinearLayout(this);
++        page.setOrientation(LinearLayout.VERTICAL);
++        page.setBackgroundColor(Color.BLACK);
++        LinearLayout header = new LinearLayout(this);
++        header.setGravity(Gravity.CENTER_VERTICAL);
++        header.setPadding(dp(12), dp(7), dp(12), dp(7));
++        TextView heading = new TextView(this);
++        heading.setText(video.optString("title", "Rumble"));
++        heading.setTextColor(WHITE);
++        heading.setTextSize(17);
++        heading.setMaxLines(2);
++        header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
++        follow = new Button(this);
++        follow.setAllCaps(false);
++        follow.setOnClickListener(v -> toggleFollow());
++        header.addView(follow, new LinearLayout.LayoutParams(-2, -2));
++        updateFollow();
++        page.addView(header, new LinearLayout.LayoutParams(-1, -2));
++
++        FrameLayout playerHolder = new FrameLayout(this);
++        view = new PlayerView(this);
++        view.setUseController(true);
++        playerHolder.addView(view, new FrameLayout.LayoutParams(-1, -1));
++        page.addView(playerHolder, new LinearLayout.LayoutParams(-1, 0, 1));
++        setContentView(page);
++        createPlayer();
++    }
++
++    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
++
++    private void addStream(String value, HashSet<String> seen) {
++        try {
++            Uri uri = Uri.parse(value);
++            if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && seen.add(value))
++                streams.add(value);
++        } catch (Exception ignored) { }
++    }
++
++    private void createPlayer() {
++        DefaultLoadControl load = new DefaultLoadControl.Builder()
++                .setBufferDurationsMs(30_000, 90_000, 3_000, 7_000).createDefaultLoadControl();
++        player = ExoPlayerFactory.newSimpleInstance(this, new com.google.android.exoplayer2.DefaultRenderersFactory(this),
++                new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(), load);
++        view.setPlayer(player);
++        player.addListener(new Player.EventListener() {
++            @Override public void onPlayerStateChanged(boolean playWhenReady, int state) {
++                timer.removeCallbacks(checkStall);
++                if (state == Player.STATE_BUFFERING && playWhenReady) timer.postDelayed(checkStall, 12_000);
++                if (state == Player.STATE_READY) retries = 0;
++                if (state == Player.STATE_ENDED) storeProgress();
++            }
++            @Override public void onPlayerError(ExoPlaybackException error) {
++                timer.removeCallbacks(checkStall);
++                switchStream("Rumble stream failed. Trying another quality");
++            }
++        });
++        playStream(0);
++        timer.postDelayed(savePosition, 12_000);
++    }
++
++    private void playStream(int index) {
++        if (player == null) return;
++        String url = streams.get(index);
++        DefaultHttpDataSourceFactory network = new DefaultHttpDataSourceFactory("SmartTube-Pat-Rumble/1");
++        Uri uri = Uri.parse(url);
++        MediaSource source = url.contains(".m3u8") || url.toLowerCase().contains("hls")
++                ? new HlsMediaSource.Factory(network).createMediaSource(uri)
++                : new ExtractorMediaSource.Factory(network).createMediaSource(uri);
++        player.prepare(source);
++        if (resumeMs > 0) player.seekTo(resumeMs);
++        player.setPlayWhenReady(true);
++    }
++
++    private void switchStream(String message) {
++        if (player == null) return;
++        timer.removeCallbacks(checkStall);
++        retries++;
++        resumeMs = Math.max(0, player.getCurrentPosition());
++        if (streamIndex + 1 < streams.size()) {
++            streamIndex++;
++            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
++            playStream(streamIndex);
++        } else if (retries <= 2) {
++            streamIndex = 0;
++            playStream(streamIndex);
++        } else {
++            Toast.makeText(this, "Rumble isn't delivering this video. Try again later.", Toast.LENGTH_LONG).show();
++            player.setPlayWhenReady(false);
++        }
++    }
++
++    private void updateFollow() {
++        String id = video.optString("channelUrl", "");
++        if (id.isEmpty()) id = video.optString("channelId", "");
++        follow.setVisibility(id.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
++        follow.setText(sync.isFollowed(id) ? "✓ Following" : "+ Follow channel");
++    }
++
++    private void toggleFollow() {
++        String id = video.optString("channelUrl", "");
++        if (id.isEmpty()) id = video.optString("channelId", "");
++        if (id.isEmpty()) return;
++        sync.follow(id, video.optString("channelName", id), !sync.isFollowed(id));
++        updateFollow();
++        if (sync.paired()) sync.syncNow(null);
++    }
++
++    private void storeProgress() {
++        if (player == null) return;
++        long duration = player.getDuration();
++        long position = player.getCurrentPosition();
++        if (position >= 0 && duration > 0 && duration < 86_400_000)
++            sync.saveProgress(video.optString("id"), Math.min(position, duration), duration);
++    }
++
++    @Override protected void onStart() {
++        super.onStart();
++        if (player == null && view != null && !streams.isEmpty()) {
++            resumeMs = sync.resumePosition(video.optString("id"));
++            createPlayer();
++        }
++    }
++
++    @Override protected void onStop() {
++        timer.removeCallbacks(checkStall);
++        timer.removeCallbacks(savePosition);
++        storeProgress();
++        if (player != null) { view.setPlayer(null); player.release(); player = null; }
++        if (sync.paired()) sync.syncNow(null);
++        super.onStop();
++    }
++}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
+new file mode 100644
+index 0000000..d08b286
+--- /dev/null
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
+@@ -0,0 +1,446 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++import android.os.Handler;
++import android.os.Looper;
++import android.text.TextUtils;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.io.ByteArrayOutputStream;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.nio.charset.StandardCharsets;
++import java.util.HashSet;
++import java.util.Set;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++
++/**
++ * Private per-device credentials, public Bunny Edge URL discovery, and
++ * revision-safe state synchronization shared by the phone and Google TV.
++ * Database credentials and the Rumble provider API key never reach Android.
++ */
++public final class PatSyncClient {
++    private static final String CONFIG_URL =
++            "https://raw.githubusercontent.com/surinp3/smarttube-mobile/main/sync_config.json";
++    private static final String PREFS = "pat_bunny_sync";
++    private static final ExecutorService EXEC = Executors.newSingleThreadExecutor();
++    private static final Handler MAIN = new Handler(Looper.getMainLooper());
++    private static final String DEFAULT_STATE =
++            "{\"sourceFilter\":\"both\",\"channels\":[],\"sidebar\":[],\"progress\":[]}";
++
++    public interface Callback { void onResult(Result result); }
++
++    public static final class Result {
++        public final int code;
++        public final JSONObject data;
++        public final String message;
++        Result(int code, JSONObject data, String message) {
++            this.code = code;
++            this.data = data == null ? new JSONObject() : data;
++            this.message = message;
++        }
++        public boolean ok() { return code >= 200 && code < 300; }
++    }
++
++    private interface Work { Result run() throws Exception; }
++
++    private final SharedPreferences prefs;
++
++    public PatSyncClient(Context context) {
++        prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
++    }
++
++    public String endpoint() { return prefs.getString("endpoint", ""); }
++    public boolean paired() { return !TextUtils.isEmpty(prefs.getString("token", "")); }
++    public String sourceFilter() { return state().optString("sourceFilter", "both"); }
++    public JSONObject state() {
++        try { return new JSONObject(prefs.getString("state", DEFAULT_STATE)); }
++        catch (Exception ignored) {
++            try { return new JSONObject(DEFAULT_STATE); }
++            catch (Exception impossible) { return new JSONObject(); }
++        }
++    }
++
++    private static String validatedEndpoint(String input) {
++        try {
++            URL url = new URL(input == null ? "" : input.trim());
++            if (!"https".equals(url.getProtocol()) || TextUtils.isEmpty(url.getHost()) ||
++                    url.getUserInfo() != null || url.getQuery() != null || url.getRef() != null) return null;
++            String clean = url.toExternalForm();
++            while (clean.endsWith("/")) clean = clean.substring(0, clean.length() - 1);
++            return clean.length() <= 400 ? clean : null;
++        } catch (Exception ignored) { return null; }
++    }
++
++    /** Changing servers revokes the local session to avoid sending a token elsewhere. */
++    public void configureEndpoint(String url) {
++        String valid = validatedEndpoint(url);
++        if (valid == null) throw new IllegalArgumentException("An HTTPS Bunny Edge Script URL is required");
++        if (!valid.equals(endpoint())) {
++            prefs.edit().putString("endpoint", valid).remove("token")
++                    .remove("pending").remove("revision").apply();
++        }
++    }
++
++    public void clearPairing() {
++        prefs.edit().remove("token").remove("pending").remove("revision").apply();
++    }
++
++    private String discoverEndpoint() throws Exception {
++        String local = validatedEndpoint(endpoint());
++        if (local != null) return local;
++        HttpURLConnection connection = (HttpURLConnection) new URL(CONFIG_URL).openConnection();
++        connection.setConnectTimeout(7000);
++        connection.setReadTimeout(7000);
++        try {
++            if (connection.getResponseCode() != 200) throw new IllegalStateException("Sync configuration unavailable");
++            String content = readLimited(connection.getInputStream(), 8192);
++            JSONObject json = new JSONObject(content);
++            String discovered = validatedEndpoint(json.optString("edgeScriptUrl", ""));
++            if (!json.optBoolean("enabled") || discovered == null)
++                throw new IllegalStateException("Bunny sync isn't activated yet");
++            prefs.edit().putString("endpoint", discovered).apply();
++            return discovered;
++        } finally { connection.disconnect(); }
++    }
++
++    private static String readLimited(InputStream input, int max) throws Exception {
++        try (InputStream stream = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
++            byte[] buffer = new byte[4096];
++            int count;
++            while ((count = stream.read(buffer)) != -1) {
++                if (out.size() + count > max) throw new IllegalStateException("Response too large");
++                out.write(buffer, 0, count);
++            }
++            return out.toString("UTF-8");
++        }
++    }
++
++    private Result request(String path, String method, JSONObject body, String auth) throws Exception {
++        URL target = new URL(discoverEndpoint() + path);
++        HttpURLConnection connection = (HttpURLConnection) target.openConnection();
++        connection.setConnectTimeout(9000);
++        connection.setReadTimeout(15000);
++        connection.setRequestMethod(method);
++        connection.setRequestProperty("Accept", "application/json");
++        connection.setRequestProperty("Cache-Control", "no-cache");
++        if (auth != null && !auth.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + auth);
++        if (body != null) {
++            connection.setDoOutput(true);
++            connection.setRequestProperty("Content-Type", "application/json");
++            try (OutputStream stream = connection.getOutputStream()) {
++                stream.write(body.toString().getBytes(StandardCharsets.UTF_8));
++            }
++        }
++        try {
++            int status = connection.getResponseCode();
++            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
++            JSONObject data = stream == null ? new JSONObject() : new JSONObject(readLimited(stream, 350_000));
++            return new Result(status, data, data.optString("error", status < 400 ? "OK" : "Request failed"));
++        } finally { connection.disconnect(); }
++    }
++
++    private static void enqueue(Work work, Callback callback) {
++        EXEC.execute(() -> {
++            Result result;
++            try { result = work.run(); }
++            catch (Exception error) {
++                result = new Result(0, null,
++                        error.getMessage() != null ? error.getMessage() : "Connection unavailable");
++            }
++            final Result complete = result;
++            if (callback != null) MAIN.post(() -> callback.onResult(complete));
++        });
++    }
++
++    /** Called on the phone once; setup code is never retained in preferences. */
++    public void authorizePhone(String setupCode, Callback done) {
++        enqueue(() -> {
++            JSONObject body = new JSONObject().put("setupCode", setupCode)
++                    .put("deviceName", "Android phone");
++            Result result = request("/v1/device/bootstrap", "POST", body, null);
++            if (result.ok()) {
++                String token = result.data.optString("deviceToken", "");
++                if (token.matches("[0-9a-f]{64}")) {
++                    prefs.edit().putString("token", token).remove("pending").apply();
++                    return syncBlocking();
++                }
++                return new Result(502, null, "Bunny server returned an invalid device token");
++            }
++            return result;
++        }, done);
++    }
++
++    /** TV-only initial setup. The TV receives only a temporary random token. */
++    public void startPairing(Callback done) {
++        enqueue(() -> {
++            Result result = request("/v1/pair/start", "POST", new JSONObject(), null);
++            if (result.ok() && result.data.optString("pendingToken", "").matches("[0-9a-f]{64}"))
++                prefs.edit().putString("pending", result.data.optString("pendingToken")).apply();
++            return result;
++        }, done);
++    }
++
++    public void pairingStatus(Callback done) {
++        enqueue(() -> {
++            String pending = prefs.getString("pending", "");
++            if (pending.isEmpty()) return new Result(400, null, "No pairing request in progress");
++            Result result = request("/v1/pair/status", "GET", null, pending);
++            if (result.ok() && "approved".equals(result.data.optString("status"))) {
++                // A new TV adopts the phone's cloud state on its first sync.
++                prefs.edit().putString("token", pending).remove("pending").remove("dirty").apply();
++                return syncBlocking();
++            }
++            return result;
++        }, done);
++    }
++
++    public void approvePairing(String code, Callback done) {
++        enqueue(() -> request("/v1/pair/approve", "POST",
++                new JSONObject().put("code", code), prefs.getString("token", "")), done);
++    }
++
++    public void syncNow(Callback done) { enqueue(this::syncBlocking, done); }
++
++    private Result syncBlocking() throws Exception {
++        String token = prefs.getString("token", "");
++        if (token.isEmpty()) return new Result(401, null, "Connect this device first");
++        for (int attempt = 0; attempt < 3; attempt++) {
++            Result remote = request("/v1/state", "GET", null, token);
++            if (!remote.ok()) return remote;
++            JSONObject remoteState = remote.data.optJSONObject("state");
++            if (remoteState == null) return new Result(502, null, "Invalid sync response");
++            Set<String> dirty = dirtyKeys();
++            if (dirty.isEmpty()) {
++                prefs.edit().putString("state", remoteState.toString())
++                        .putLong("revision", remote.data.optLong("revision", 0)).apply();
++                return new Result(200, remote.data, "Synchronized");
++            }
++            String uploadedLocalSnapshot = state().toString();
++            JSONObject merged = merge(remoteState, new JSONObject(uploadedLocalSnapshot), dirty);
++            JSONObject upload = new JSONObject().put("revision", remote.data.optLong("revision", 0))
++                    .put("state", merged);
++            Result saved = request("/v1/state", "PUT", upload, token);
++            if (saved.ok()) {
++                // Never clear edits that happened while this network request was running.
++                if (dirty.equals(dirtyKeys()) && state().toString().equals(uploadedLocalSnapshot)) {
++                    prefs.edit().putString("state", merged.toString()).remove("dirty")
++                            .putLong("revision", saved.data.optLong("revision", 0)).apply();
++                }
++                return new Result(200, saved.data, "Synchronized");
++            }
++            if (saved.code != 409) return saved;
++        }
++        return new Result(409, null, "Another device changed settings. Retry sync.");
++    }
++
++    private Set<String> dirtyKeys() {
++        Set<String> keys = new HashSet<>();
++        JSONArray dirty = parseArray(prefs.getString("dirty", "[]"));
++        for (int i = 0; i < dirty.length(); i++) {
++            String key = dirty.optString(i, "");
++            if (!key.isEmpty()) keys.add(key);
++        }
++        return keys;
++    }
++
++    private static JSONArray parseArray(String json) {
++        try { return new JSONArray(json); } catch (Exception ignored) { return new JSONArray(); }
++    }
++
++    private void saveEdited(JSONObject state, String editedKey) {
++        Set<String> dirty = dirtyKeys();
++        dirty.add(editedKey);
++        prefs.edit().putString("state", state.toString())
++                .putString("dirty", new JSONArray(dirty).toString()).apply();
++    }
++
++    public void setSourceFilter(String filter) {
++        if (!"youtube".equals(filter) && !"rumble".equals(filter) && !"both".equals(filter)) return;
++        JSONObject value = state();
++        try { value.put("sourceFilter", filter); saveEdited(value, "sourceFilter"); }
++        catch (Exception ignored) { }
++    }
++
++    public JSONArray followedChannels() {
++        JSONArray source = state().optJSONArray("channels");
++        JSONArray selected = new JSONArray();
++        if (source != null) for (int i = 0; i < source.length(); i++) {
++            JSONObject channel = source.optJSONObject(i);
++            if (channel != null && "rumble".equals(channel.optString("provider")) &&
++                    channel.optBoolean("subscribed")) selected.put(channel);
++        }
++        return selected;
++    }
++
++    public boolean isFollowed(String id) {
++        JSONArray channels = followedChannels();
++        for (int i = 0; i < channels.length(); i++) {
++            if (id.equals(channels.optJSONObject(i).optString("id"))) return true;
++        }
++        return false;
++    }
++
++    public void follow(String id, String name, boolean subscribed) {
++        if (id == null || id.isEmpty() || id.length() > 200) return;
++        JSONObject value = state();
++        JSONArray channels = value.optJSONArray("channels");
++        if (channels == null) channels = new JSONArray();
++        JSONArray updated = new JSONArray();
++        int order = channels.length();
++        for (int i = 0; i < channels.length(); i++) {
++            JSONObject entry = channels.optJSONObject(i);
++            if (entry == null) continue;
++            if (id.equals(entry.optString("id")) && "rumble".equals(entry.optString("provider"))) {
++                order = entry.optInt("order", i);
++            } else updated.put(entry);
++        }
++        try {
++            updated.put(new JSONObject().put("provider", "rumble").put("id", id)
++                    .put("name", name == null || name.trim().isEmpty() ? id : name.substring(0, Math.min(200, name.length())))
++                    .put("subscribed", subscribed).put("order", order));
++            value.put("channels", updated);
++            saveEdited(value, "channel:" + id);
++            updateRumbleSidebar();
++        } catch (Exception ignored) { }
++    }
++
++    public void moveFollowedChannel(String id, int direction) {
++        JSONObject value = state();
++        JSONArray source = value.optJSONArray("channels");
++        if (source == null || source.length() < 2) return;
++        java.util.ArrayList<JSONObject> ordered = new java.util.ArrayList<>();
++        for (int i = 0; i < source.length(); i++) {
++            JSONObject entry = source.optJSONObject(i);
++            if (entry != null) ordered.add(entry);
++        }
++        java.util.Collections.sort(ordered, (a, b) -> Integer.compare(a.optInt("order"), b.optInt("order")));
++        int index = -1;
++        for (int i = 0; i < ordered.size(); i++) if (id.equals(ordered.get(i).optString("id"))) index = i;
++        int next = index + direction;
++        if (index < 0 || next < 0 || next >= ordered.size()) return;
++        java.util.Collections.swap(ordered, index, next);
++        JSONArray rewritten = new JSONArray();
++        for (int i = 0; i < ordered.size(); i++) {
++            JSONObject entry = ordered.get(i);
++            try { entry.put("order", i); } catch (Exception ignored) { }
++            rewritten.put(entry);
++        }
++        try {
++            value.put("channels", rewritten);
++            Set<String> dirty = dirtyKeys();
++            dirty.add("channel:" + ordered.get(index).optString("id"));
++            dirty.add("channel:" + ordered.get(next).optString("id"));
++            prefs.edit().putString("state", value.toString())
++                    .putString("dirty", new JSONArray(dirty).toString()).apply();
++            updateRumbleSidebar();
++        } catch (Exception ignored) { }
++    }
++
++    private void updateRumbleSidebar() {
++        JSONObject value = state();
++        JSONArray existing = value.optJSONArray("sidebar");
++        JSONArray sidebar = new JSONArray();
++        if (existing != null) for (int i = 0; i < existing.length(); i++) {
++            JSONObject entry = existing.optJSONObject(i);
++            if (entry != null && !"rumble".equals(entry.optString("provider"))) sidebar.put(entry);
++        }
++        JSONArray followed = followedChannels();
++        for (int i = 0; i < followed.length(); i++) {
++            JSONObject channel = followed.optJSONObject(i);
++            if (channel == null) continue;
++            try { sidebar.put(new JSONObject().put("provider", "rumble")
++                    .put("id", channel.optString("id"))
++                    .put("label", channel.optString("name"))
++                    .put("order", channel.optInt("order", i))
++                    .put("pinned", true)); }
++            catch (Exception ignored) { }
++        }
++        saveSidebar(sidebar);
++    }
++
++    /** Does not rewrite the native SmartTube sidebar or touch its YouTube credentials. */
++    public void saveSidebar(JSONArray sidebar) {
++        JSONObject value = state();
++        try { value.put("sidebar", sidebar); saveEdited(value, "sidebar"); }
++        catch (Exception ignored) { }
++    }
++
++    public long resumePosition(String id) {
++        JSONArray progress = state().optJSONArray("progress");
++        if (progress != null) for (int i = 0; i < progress.length(); i++) {
++            JSONObject item = progress.optJSONObject(i);
++            if (item != null && "rumble".equals(item.optString("provider")) && id.equals(item.optString("id")))
++                return item.optLong("positionMs", 0);
++        }
++        return 0;
++    }
++
++    public void saveProgress(String id, long positionMs, long durationMs) {
++        if (id == null || id.isEmpty() || positionMs < 0 || durationMs <= 0) return;
++        JSONObject value = state();
++        JSONArray progress = value.optJSONArray("progress");
++        JSONArray updated = new JSONArray();
++        if (progress != null) for (int i = 0; i < progress.length(); i++) {
++            JSONObject item = progress.optJSONObject(i);
++            if (item != null && !("rumble".equals(item.optString("provider")) && id.equals(item.optString("id"))))
++                updated.put(item);
++        }
++        try {
++            updated.put(new JSONObject().put("provider", "rumble").put("id", id)
++                    .put("positionMs", positionMs).put("durationMs", durationMs)
++                    .put("updatedAtMs", System.currentTimeMillis()));
++            value.put("progress", updated);
++            saveEdited(value, "progress:" + id);
++        } catch (Exception ignored) { }
++    }
++
++    private static JSONObject merge(JSONObject server, JSONObject local, Set<String> dirty) throws Exception {
++        JSONObject output = new JSONObject(server.toString());
++        if (dirty.contains("sourceFilter")) output.put("sourceFilter", local.optString("sourceFilter", "both"));
++        JSONArray remoteChannels = server.optJSONArray("channels");
++        JSONArray localChannels = local.optJSONArray("channels");
++        JSONArray channels = new JSONArray();
++        if (remoteChannels != null) for (int i = 0; i < remoteChannels.length(); i++) {
++            JSONObject item = remoteChannels.optJSONObject(i);
++            if (item != null && !dirty.contains("channel:" + item.optString("id"))) channels.put(item);
++        }
++        if (localChannels != null) for (int i = 0; i < localChannels.length(); i++) {
++            JSONObject item = localChannels.optJSONObject(i);
++            if (item != null && dirty.contains("channel:" + item.optString("id"))) channels.put(item);
++        }
++        output.put("channels", channels);
++        if (dirty.contains("sidebar")) output.put("sidebar", local.optJSONArray("sidebar"));
++        JSONArray combinedProgress = new JSONArray();
++        JSONObject newest = new JSONObject();
++        for (JSONArray source : new JSONArray[]{server.optJSONArray("progress"), local.optJSONArray("progress")}) {
++            if (source == null) continue;
++            for (int i = 0; i < source.length(); i++) {
++                JSONObject item = source.optJSONObject(i);
++                if (item == null) continue;
++                String key = item.optString("provider") + ":" + item.optString("id");
++                JSONObject previous = newest.optJSONObject(key);
++                if (previous == null || item.optLong("updatedAtMs") > previous.optLong("updatedAtMs")) newest.put(key, item);
++            }
++        }
++        for (java.util.Iterator<String> keys = newest.keys(); keys.hasNext(); ) combinedProgress.put(newest.getJSONObject(keys.next()));
++        output.put("progress", combinedProgress);
++        return output;
++    }
++
++    public void rumbleSearch(String query, Callback done) {
++        enqueue(() -> request("/v1/rumble/search?q=" + java.net.URLEncoder.encode(query, "UTF-8"),
++                "GET", null, prefs.getString("token", "")), done);
++    }
++
++    public void rumbleChannel(String channelUrl, Callback done) {
++        enqueue(() -> request("/v1/rumble/channel?url=" + java.net.URLEncoder.encode(channelUrl, "UTF-8"),
++                "GET", null, prefs.getString("token", "")), done);
++    }
++}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
+index ee6b2ce..de12892 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
+@@ -51,6 +51,9 @@ import com.liskovsoft.mediaserviceinterfaces.SignInService;
+ import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
+ import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
+ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatHubActivity;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumblePlayerActivity;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatSyncClient;
+ import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
+ import com.liskovsoft.smartyoutubetv2.tv.R;
+ import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
+@@ -59,6 +62,9 @@ import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
+ import io.reactivex.disposables.CompositeDisposable;
+ import io.reactivex.Observable;
+ 
++import org.json.JSONArray;
++import org.json.JSONObject;
++
+ import java.net.UnknownHostException;
+ import java.util.ArrayList;
+ import java.util.HashSet;
+@@ -76,7 +82,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+     private static final int PRIMARY = Color.WHITE;
+     private static final int SECONDARY = Color.rgb(170, 170, 170);
+     private static final int ACCENT = Color.rgb(255, 35, 35);
+-    private static final int MOBILE_VERSION = 13;
++    private static final int MOBILE_VERSION = 14;
+     private static final String MOBILE_PREFERENCES = "smarttube_mobile";
+     private static final String HIDE_HOME_SHORTS = "hide_home_shorts";
+     private enum Tab { HOME, SUBSCRIPTIONS, HISTORY, SEARCH, SETTINGS }
+@@ -102,6 +108,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+     private final CompositeDisposable curatedActions = new CompositeDisposable();
+     private final CompositeDisposable signInActions = new CompositeDisposable();
+     private MobileUpdater mobileUpdater;
++    private PatSyncClient patSync;
++    private String lastPatFilter;
++    private int lastPatChannelCount;
+     // The mobile shell owns the initial Home feed. Ignore the TV presenter's
+     // initial section render to avoid showing an unrelated feed first.
+     private boolean curatedMode = true;
+@@ -112,6 +121,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+     protected void onCreate(Bundle state) {
+         super.onCreate(state);
+         mobileUpdater = new MobileUpdater(this, MOBILE_VERSION);
++        patSync = new PatSyncClient(this);
++        lastPatFilter = patSync.sourceFilter();
++        lastPatChannelCount = patSync.followedChannels().length();
+         buildUi();
+         presenter = BrowsePresenter.instance(this);
+         presenter.setView(this);
+@@ -123,6 +135,27 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+     @Override
+     protected void onResume() {
+         super.onResume();
++        if (patSync != null) {
++            String filter = patSync.sourceFilter();
++            int followed = patSync.followedChannels().length();
++            if ((!filter.equals(lastPatFilter) || followed != lastPatChannelCount) &&
++                    (activeTab == Tab.HOME || activeTab == Tab.SUBSCRIPTIONS)) {
++                lastPatFilter = filter;
++                lastPatChannelCount = followed;
++                loadCuratedFeed(activeTab == Tab.SUBSCRIPTIONS);
++            }
++            if (patSync.paired()) patSync.syncNow(result -> {
++                if (!result.ok() || isFinishing()) return;
++                String remoteFilter = patSync.sourceFilter();
++                int remoteChannels = patSync.followedChannels().length();
++                if ((!remoteFilter.equals(lastPatFilter) || remoteChannels != lastPatChannelCount) &&
++                        (activeTab == Tab.HOME || activeTab == Tab.SUBSCRIPTIONS)) {
++                    lastPatFilter = remoteFilter;
++                    lastPatChannelCount = remoteChannels;
++                    loadCuratedFeed(activeTab == Tab.SUBSCRIPTIONS);
++                }
++            });
++        }
+         if (mobileUpdater != null) mobileUpdater.onResume();
+         if (presenter != null) {
+             presenter.setView(this);
+@@ -409,6 +442,15 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+                 subscriptionsOnly ? "Subscriptions" : "Home");
+         progress.setVisibility(View.VISIBLE);
+ 
++        String filter = patSync.sourceFilter();
++        if (!"youtube".equals(filter)) loadRumbleMobileVideos(subscriptionsOnly);
++        if ("rumble".equals(filter)) {
++            progress.setVisibility(View.GONE);
++            if (patSync.followedChannels().length() == 0)
++                showEmpty("Follow Rumble channels in Settings → Rumble + Bunny sync, or search for videos.", false);
++            return;
++        }
++
+         if (subscriptionsOnly) {
+             if (signInService().isSigned()) {
+                 loadAccountSubscriptions();
+@@ -420,6 +462,55 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+         }
+     }
+ 
++    /** Rumble subscriptions use the same card sizes, cropping and watch bars as YouTube. */
++    private void loadRumbleMobileVideos(boolean subscriptionsOnly) {
++        if (!patSync.paired()) return;
++        JSONArray channels = patSync.followedChannels();
++        for (int i = 0; i < Math.min(channels.length(), 12); i++) {
++            JSONObject channel = channels.optJSONObject(i);
++            if (channel == null) continue;
++            String id = channel.optString("id", "");
++            String url = id.startsWith("https://rumble.com/") ? id :
++                    "https://rumble.com/c/" + id.replaceAll("[^A-Za-z0-9_-]", "");
++            final Tab requested = subscriptionsOnly ? Tab.SUBSCRIPTIONS : Tab.HOME;
++            patSync.rumbleChannel(url, result -> {
++                if (activeTab != requested) return;
++                if (result.ok()) showRumbleResponse(result.data);
++                else if ("rumble".equals(patSync.sourceFilter()) && adapter.getItemCount() == 0)
++                    showEmpty("Rumble: " + result.message + ". Try Settings → Rumble + Bunny sync.", false);
++            });
++        }
++    }
++
++    private void showRumbleResponse(JSONObject payload) {
++        JSONArray results = payload.optJSONArray("videos");
++        if (results == null) return;
++        List<Video> found = new ArrayList<>();
++        for (int i = 0; i < results.length(); i++) {
++            JSONObject item = results.optJSONObject(i);
++            if (item == null || TextUtils.isEmpty(item.optString("streamUrl"))) continue;
++            Video card = new Video();
++            card.videoId = "rumble:" + item.optString("id");
++            card.title = item.optString("title");
++            card.author = item.optString("channelName", "Rumble");
++            card.cardImageUrl = item.optString("thumbnail");
++            card.secondTitle = "Rumble";
++            card.isLive = item.optBoolean("live", false);
++            card.description = item.toString();
++            long duration = item.optLong("durationMs", 0);
++            long resume = patSync.resumePosition(item.optString("id"));
++            if (duration > 0 && resume > 0) card.percentWatched = 100f * resume / duration;
++            found.add(card);
++        }
++        if (!found.isEmpty()) {
++            adapter.appendRumbleVideos(found);
++            emptyPanel.setVisibility(View.GONE);
++            progress.setVisibility(View.GONE);
++        } else if (adapter.getItemCount() == 0 && "rumble".equals(patSync.sourceFilter())) {
++            showEmpty("No Rumble videos found. Open Settings → Rumble + Bunny sync to search.", false);
++        }
++    }
++
+     /** Load YouTube's actual Home recommendations once, preserving their order. */
+     private void loadYouTubeHome() {
+         final boolean hideShorts = hideShortsOnHome();
+@@ -578,6 +669,14 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+         progress.setVisibility(View.VISIBLE);
+         ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
+                 .hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
++        if (!"youtube".equals(patSync.sourceFilter()))
++            patSync.rumbleSearch(query, result -> {
++                if (activeTab == Tab.SEARCH && result.ok()) showRumbleResponse(result.data);
++            });
++        if ("rumble".equals(patSync.sourceFilter())) {
++            progress.setVisibility(View.GONE);
++            return;
++        }
+         curatedActions.add(YouTubeServiceManager.instance().getContentService()
+                 .getSearchObserve(query, SearchOptions.TYPE_VIDEO)
+                 .subscribe(groups -> {
+@@ -662,6 +761,9 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+             });
+         }
+         addSettingsHeading("Home screen");
++        addSettingsRow("Rumble + Bunny sync", "Source: " + patSync.sourceFilter() +
++                " • Browse Rumble, follow channels and link your Google TV",
++                () -> startActivity(new Intent(this, PatHubActivity.class)));
+         addSettingsToggle("Hide Shorts on Home", "Keep YouTube Shorts out of Home recommendations",
+                 hideShortsOnHome(), (button, checked) -> getSharedPreferences(MOBILE_PREFERENCES, MODE_PRIVATE)
+                         .edit().putBoolean(HIDE_HOME_SHORTS, checked).apply());
+@@ -976,6 +1078,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+         private final List<Video> videos = new ArrayList<>();
+         private final List<Video> subscriptionVideos = new ArrayList<>();
+         private final List<Video> recommendedVideos = new ArrayList<>();
++        private final List<Video> rumbleVideos = new ArrayList<>();
+ 
+         /** One atomic Home update: no subscription insertion or age-based resorting. */
+         void setHomeVideos(List<Video> picks) {
+@@ -983,9 +1086,33 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+             subscriptionVideos.clear();
+             recommendedVideos.clear();
+             videos.addAll(picks);
++            interleaveRumble();
++            notifyDataSetChanged();
++        }
++
++        void appendRumbleVideos(List<Video> latest) {
++            Set<String> known = new HashSet<>();
++            for (Video item : rumbleVideos) known.add(item.videoId);
++            for (Video item : latest) if (known.add(item.videoId)) rumbleVideos.add(item);
++            // Keep YouTube's original ranking and insert one Rumble card after
++            // every two YouTube cards, rather than stacking sources separately.
++            interleaveRumble();
+             notifyDataSetChanged();
+         }
+ 
++        private void interleaveRumble() {
++            List<Video> youtubeOnly = new ArrayList<>();
++            for (Video item : videos) {
++                if (item.videoId == null || !item.videoId.startsWith("rumble:")) youtubeOnly.add(item);
++            }
++            videos.clear();
++            int y = 0, r = 0;
++            while (y < youtubeOnly.size() || r < rumbleVideos.size()) {
++                for (int i = 0; i < 2 && y < youtubeOnly.size(); i++) videos.add(youtubeOnly.get(y++));
++                if (r < rumbleVideos.size()) videos.add(rumbleVideos.get(r++));
++            }
++        }
++
+         void appendHomePage(VideoGroup group) {
+             if (group == null || group.getVideos() == null) return;
+             boolean hideShorts = hideShortsOnHome();
+@@ -1001,7 +1128,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+                     changed = true;
+                 }
+             }
+-            if (changed) notifyDataSetChanged();
++            if (changed) { interleaveRumble(); notifyDataSetChanged(); }
+         }
+ 
+         void apply(VideoGroup group) {
+@@ -1010,10 +1137,11 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+             if (group.getAction() == VideoGroup.ACTION_REMOVE) videos.removeAll(group.getVideos());
+             else if (group.getAction() == VideoGroup.ACTION_PREPEND) videos.addAll(0, group.getVideos());
+             else videos.addAll(group.getVideos());
++            interleaveRumble();
+             notifyDataSetChanged();
+         }
+ 
+-        void clear() { videos.clear(); subscriptionVideos.clear(); recommendedVideos.clear(); notifyDataSetChanged(); }
++        void clear() { videos.clear(); subscriptionVideos.clear(); recommendedVideos.clear(); rumbleVideos.clear(); notifyDataSetChanged(); }
+         void appendCurated(VideoGroup group, int limit, boolean subscription, boolean subscriptionsOnly) {
+             appendCurated(group, limit, subscription, subscriptionsOnly, true);
+         }
+@@ -1042,6 +1170,7 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+                     if (rec < recommendedVideos.size()) videos.add(recommendedVideos.get(rec++));
+                 }
+             }
++            interleaveRumble();
+             notifyDataSetChanged();
+         }
+         long videoAge(Video video) {
+@@ -1163,8 +1292,26 @@ public class MobileBrowseActivity extends MotherActivity implements BrowseView {
+                 watchedFill.setScaleX(Math.min(100f, watched) / 100f);
+             }
+             Glide.with(image).load(video.cardImageUrl).placeholder(R.drawable.movie).into(image);
+-            itemView.setOnClickListener(v -> presenter.onVideoItemClicked(video));
+-            itemView.setOnLongClickListener(v -> { presenter.onVideoItemLongClicked(video); return true; });
++            if (video.videoId != null && video.videoId.startsWith("rumble:")) {
++                itemView.setOnClickListener(v -> startActivity(new Intent(MobileBrowseActivity.this,
++                        PatRumblePlayerActivity.class).putExtra(PatRumblePlayerActivity.EXTRA_VIDEO, video.description)));
++                itemView.setOnLongClickListener(v -> {
++                    try {
++                        JSONObject rumble = new JSONObject(video.description);
++                        String channel = rumble.optString("channelUrl", rumble.optString("channelId"));
++                        if (channel.isEmpty()) return false;
++                        patSync.follow(channel, rumble.optString("channelName", channel), !patSync.isFollowed(channel));
++                        if (patSync.paired()) patSync.syncNow(null);
++                        Toast.makeText(MobileBrowseActivity.this,
++                                patSync.isFollowed(channel) ? "Following Rumble channel" : "Unfollowed Rumble channel",
++                                Toast.LENGTH_SHORT).show();
++                        return true;
++                    } catch (Exception ignored) { return false; }
++                });
++            } else {
++                itemView.setOnClickListener(v -> presenter.onVideoItemClicked(video));
++                itemView.setOnLongClickListener(v -> { presenter.onVideoItemLongClicked(video); return true; });
++            }
+         }
+     }
+ 

@@ -8,7 +8,13 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - Larger 40–75 second buffer for the medium-buffer profile, 3-second start and 7-second rebuffer target. Low-buffer mode remains available for low-latency live viewing.
 - After 12 seconds of cumulative buffering within a minute, TV VOD playback tries another client rather than blindly reloading the same one. SABR reload-token fixes from the pinned upstream revision remain in place.
 - Never silently changes a user's DNS preference to Google DNS during stall recovery.
-- Separate signed `tv-v2` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- Separate signed `tv-v3` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- TV Settings → **Rumble + Bunny sync** opens a D-pad-friendly YouTube/Rumble/Both
+  grid and local Rumble channel sidebar. Pair by entering the on-screen
+  10-digit code into the mobile app. The credentials stay off the TV.
+- Bunny service and Rumble provider require activation first: see
+  [Bunny setup](bunny-sync/README.md). The original TV YouTube interface
+  remains available without Bunny.
 - In-app update checker reads `tv_update.json` on main, rather than the upstream SmartTube update manifest. Update this JSON and release URL with every future TV release.
 - No claims of zero buffering: actual performance depends on CDN, ISP, YouTube API changes and the attached device. Test on the Google TV Streamer before judging reliability.
 
