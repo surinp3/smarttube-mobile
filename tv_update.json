@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v5/SmartTube-Pat-TV-v5-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v7/SmartTube-Pat-TV-v7-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v5/SmartTube-Pat-TV-v5-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v7/SmartTube-Pat-TV-v7-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v5/SmartTube-Pat-TV-v5-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v7/SmartTube-Pat-TV-v7-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -32,6 +32,14 @@
     "changelog": [
       "Adds Follow on Rumble to the YouTube player controls",
       "Choose a matching Rumble channel to save it to your synced SmartTube follows"
+    ]
+  },
+  "32.69-tv.7": {
+    "versionCode": 3007,
+    "changelog": [
+      "Home shows recent videos from YouTube subscriptions and followed Rumble channels, newest first where dates are available",
+      "Rumble cards show the channel name and upload date when available",
+      "Both mixes YouTube and matching Rumble videos in each category, including creators you do not follow"
     ]
   }
 }
