@@ -6,7 +6,7 @@ import { createSyncHandler } from "../bunny-sync/handler.mjs";
 import { SQLiteAdapter } from "./sqlite.mjs";
 
 const MIN_SETUP_LENGTH = 20;
-const RELEASE_VERSION = "1.1";
+const RELEASE_VERSION = "1.2";
 
 function headersFromNode(request) {
   const headers = new Headers();
