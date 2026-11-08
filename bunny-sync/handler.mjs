@@ -207,28 +207,34 @@ function httpsUrlOrNull(value) {
   }
 }
 
+function durationMilliseconds(value) {
+  const seconds = Number(value.duration_s);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  if (typeof value.duration !== "string" || !/^\d{1,3}:\d{2}(?::\d{2})?$/.test(value.duration)) return 0;
+  return value.duration.split(":").reduce((total, part) => total * 60 + Number(part), 0) * 1000;
+}
+
 function normalizeRumbleVideo(value) {
   if (!isObject(value) || !limitedString(value.id, 100) ||
       !limitedString(value.title, 600)) return null;
   const channel = isObject(value.channel) ? value.channel : {};
   const files = Array.isArray(value.files) ? value.files
-    .filter((file) => isObject(file) && httpsUrlOrNull(file.url))
+    .filter((file) => isObject(file) && httpsUrlOrNull(file.url) &&
+      (file.type === "hls" || file.type === "mp4" ||
+       /\.(mp4|m3u8)$/i.test(new URL(file.url).pathname)))
     .slice(0, 12)
     .map((file) => ({
       url: httpsUrlOrNull(file.url),
-      type: file.type === "hls" ? "hls" : "mp4",
+      type: file.type === "hls" || file.url.includes(".m3u8") ? "hls" : "mp4",
       quality: typeof file.quality_text === "string" ? file.quality_text.slice(0, 50) : "",
     })) : [];
-  const seconds = Number(value.duration_s);
-  const durationMs = Number.isFinite(seconds) && seconds >= 0
-    ? Math.round(seconds * 1000) : 0;
   return {
     provider: "rumble",
     id: value.id.slice(0, 100),
     url: httpsUrlOrNull(value.url),
     title: value.title.slice(0, 600),
     thumbnail: httpsUrlOrNull(value.thumbnail),
-    durationMs,
+    durationMs: durationMilliseconds(value),
     publishedAt: typeof value.published_at === "string" ? value.published_at.slice(0, 80) : "",
     live: value.live === true,
     short: value.short === true,
@@ -238,6 +244,18 @@ function normalizeRumbleVideo(value) {
     streamUrl: httpsUrlOrNull(value.hls) ?? files[0]?.url ?? null,
     files,
   };
+}
+
+function parseRumbleVideoUrl(request) {
+  const input = new URL(request.url).searchParams.get("url");
+  if (!input || input.length > 400) return null;
+  try {
+    const video = new URL(input);
+    if (video.protocol !== "https:" || video.hostname !== "rumble.com" ||
+        !/^\/v[a-zA-Z0-9]{4,100}(?:-[a-zA-Z0-9._-]{1,240})?(?:\.html)?$/.test(video.pathname) ||
+        video.search || video.hash) return null;
+    return `https://rumble.com${video.pathname}`;
+  } catch { return null; }
 }
 
 function parseRumbleQuery(request) {
@@ -317,6 +335,44 @@ async function rumbleVideos(db, request, config, timestamp) {
       "ON CONFLICT(cache_key) DO UPDATE SET body_json = excluded.body_json, expires_at_ms = excluded.expires_at_ms"
     ).bind(input.cacheKey, text, timestamp + 60 * 60 * 1000).run();
   }
+  return result(200, { ...payload, cached: false });
+}
+
+/** Search results do not contain media URLs; resolve streams only when a video is opened. */
+async function rumbleVideo(db, request, config, timestamp) {
+  const videoUrl = parseRumbleVideoUrl(request);
+  if (!videoUrl) return result(400, { error: "Invalid Rumble video URL" });
+  const cacheKey = `v:${videoUrl.toLowerCase()}`;
+  const cached = await db.prepare("SELECT body_json, expires_at_ms FROM rumble_cache WHERE cache_key = ?")
+    .bind(cacheKey).first();
+  if (cached && cached.expires_at_ms > timestamp)
+    return result(200, { ...JSON.parse(cached.body_json), cached: true });
+  if (!limitedString(config.rumbleApiKey, 512))
+    return result(503, { error: "Rumble video API key not configured" });
+  if (!await rateLimit(db, "rumble-fetch", timestamp, 30, 86_400_000))
+    return result(429, { error: "Daily Rumble lookup allowance reached" });
+  const upstream = new URL("https://api.api.sh/rumble/v1/video");
+  upstream.searchParams.set("url", videoUrl);
+  let response;
+  try {
+    response = await (config.fetch ?? fetch)(upstream, {
+      headers: { "x-api-key": config.rumbleApiKey, accept: "application/json" },
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch { return result(502, { error: "Rumble video service unreachable" }); }
+  if (!response.ok) return result(502, { error: "Rumble video service rejected request" });
+  let data;
+  try { data = await response.json(); }
+  catch { return result(502, { error: "Invalid Rumble video response" }); }
+  const video = normalizeRumbleVideo(data);
+  if (!video || !video.streamUrl)
+    return result(502, { error: "Rumble did not provide a playable media stream" });
+  const payload = { video };
+  const body = JSON.stringify(payload);
+  await db.prepare(
+    "INSERT INTO rumble_cache(cache_key, body_json, expires_at_ms) VALUES (?, ?, ?) " +
+    "ON CONFLICT(cache_key) DO UPDATE SET body_json = excluded.body_json, expires_at_ms = excluded.expires_at_ms"
+  ).bind(cacheKey, body, timestamp + 10 * 60 * 1000).run();
   return result(200, { ...payload, cached: false });
 }
 
@@ -411,6 +467,9 @@ export function createSyncHandler(db, config = {}) {
 
       if ((path === "/v1/rumble/search" || path === "/v1/rumble/channel") && method === "GET") {
         return rumbleVideos(db, request, config, now());
+      }
+      if (path === "/v1/rumble/video" && method === "GET") {
+        return rumbleVideo(db, request, config, now());
       }
 
       if (path === "/v1/pair/approve" && method === "POST") {

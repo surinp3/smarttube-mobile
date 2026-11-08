@@ -25,6 +25,19 @@ index 5e3ed03..ac02986 100644
          settingItems.add(new SettingsItem(
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
+diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
+index 51c0242..0ae146f 100644
+--- a/smarttubetv/build.gradle
++++ b/smarttubetv/build.gradle
+@@ -208,6 +216,8 @@ dependencies {
+     //////// BEGIN EXOPLAYER /////////
+ 
+     implementation project(':exoplayer-library-core')
++    // Pat Rumble player needs the HLS media source at compile and runtime.
++    implementation project(':exoplayer-library-hls')
+     implementation project(':exoplayer-library-ui')
+     implementation project(':exoplayer-extension-leanback')
+     implementation project(':exoplayer-extension-mediasession')
 diff --git a/smarttubetv/src/main/AndroidManifest.xml b/smarttubetv/src/main/AndroidManifest.xml
 index b2916c4..81acbb3 100644
 --- a/smarttubetv/src/main/AndroidManifest.xml
@@ -643,10 +656,10 @@ index 0000000..0f731d4
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
 new file mode 100644
-index 0000000..f9508ae
+index 0000000..4f2b27c
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,247 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.app.Activity;
@@ -656,6 +669,7 @@ index 0000000..f9508ae
 +import android.os.Handler;
 +import android.os.Looper;
 +import android.view.Gravity;
++import android.view.View;
 +import android.view.ViewGroup;
 +import android.widget.Button;
 +import android.widget.FrameLayout;
@@ -698,24 +712,19 @@ index 0000000..f9508ae
 +    private SimpleExoPlayer player;
 +    private PlayerView view;
 +    private Button follow;
++    private TextView loading;
 +    private JSONObject video;
 +    private int streamIndex;
 +    private int retries;
 +    private long resumeMs;
++    private boolean active;
 +
 +    @Override protected void onCreate(Bundle savedInstanceState) {
 +        super.onCreate(savedInstanceState);
 +        sync = new PatSyncClient(this);
 +        try { video = new JSONObject(getIntent().getStringExtra(EXTRA_VIDEO)); }
 +        catch (Exception ignored) { finish(); return; }
-+        HashSet<String> unique = new HashSet<>();
-+        addStream(video.optString("streamUrl"), unique);
-+        JSONArray files = video.optJSONArray("files");
-+        if (files != null) for (int i = 0; i < files.length(); i++) {
-+            JSONObject file = files.optJSONObject(i);
-+            if (file != null) addStream(file.optString("url"), unique);
-+        }
-+        if (streams.isEmpty()) { Toast.makeText(this, "No playable Rumble stream", Toast.LENGTH_LONG).show(); finish(); return; }
++        collectStreams();
 +        resumeMs = sync.resumePosition(video.optString("id"));
 +
 +        LinearLayout page = new LinearLayout(this);
@@ -741,9 +750,15 @@ index 0000000..f9508ae
 +        view = new PlayerView(this);
 +        view.setUseController(true);
 +        playerHolder.addView(view, new FrameLayout.LayoutParams(-1, -1));
++        loading = new TextView(this);
++        loading.setText(streams.isEmpty() ? "Loading Rumble video…" : "Preparing player…");
++        loading.setTextColor(WHITE);
++        loading.setTextSize(19);
++        loading.setGravity(Gravity.CENTER);
++        playerHolder.addView(loading, new FrameLayout.LayoutParams(-1, -1));
 +        page.addView(playerHolder, new LinearLayout.LayoutParams(-1, 0, 1));
 +        setContentView(page);
-+        createPlayer();
++        if (streams.isEmpty()) resolveVideo();
 +    }
 +
 +    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -751,12 +766,52 @@ index 0000000..f9508ae
 +    private void addStream(String value, HashSet<String> seen) {
 +        try {
 +            Uri uri = Uri.parse(value);
-+            if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && seen.add(value))
++            if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null &&
++                    !uri.getPath().endsWith(".tar") && seen.add(value))
 +                streams.add(value);
 +        } catch (Exception ignored) { }
 +    }
 +
++    private void collectStreams() {
++        streams.clear();
++        HashSet<String> unique = new HashSet<>();
++        addStream(video.optString("streamUrl"), unique);
++        JSONArray files = video.optJSONArray("files");
++        if (files != null) for (int i = 0; i < files.length(); i++) {
++            JSONObject file = files.optJSONObject(i);
++            if (file != null) addStream(file.optString("url"), unique);
++        }
++    }
++
++    private void resolveVideo() {
++        String url = video.optString("url", "");
++        if (!url.startsWith("https://rumble.com/")) {
++            loading.setText("Rumble video URL unavailable");
++            return;
++        }
++        sync.rumbleVideo(url, result -> {
++            if (isFinishing() || isDestroyed()) return;
++            JSONObject details = result.data.optJSONObject("video");
++            if (!result.ok() || details == null) {
++                loading.setText("Couldn't load Rumble video: " + result.message);
++                return;
++            }
++            try {
++                // Retain search-card metadata if a detail response omits fields.
++                for (java.util.Iterator<String> keys = details.keys(); keys.hasNext(); ) {
++                    String key = keys.next();
++                    if (!details.isNull(key)) video.put(key, details.opt(key));
++                }
++            } catch (Exception ignored) { }
++            collectStreams();
++            updateFollow();
++            if (streams.isEmpty()) loading.setText("No playable Rumble stream available");
++            else if (active && player == null) createPlayer();
++        });
++    }
++
 +    private void createPlayer() {
++        loading.setVisibility(View.GONE);
 +        DefaultLoadControl load = new DefaultLoadControl.Builder()
 +                .setBufferDurationsMs(30_000, 90_000, 3_000, 7_000).createDefaultLoadControl();
 +        player = ExoPlayerFactory.newSimpleInstance(this, new com.google.android.exoplayer2.DefaultRenderersFactory(this),
@@ -835,6 +890,7 @@ index 0000000..f9508ae
 +
 +    @Override protected void onStart() {
 +        super.onStart();
++        active = true;
 +        if (player == null && view != null && !streams.isEmpty()) {
 +            resumeMs = sync.resumePosition(video.optString("id"));
 +            createPlayer();
@@ -842,6 +898,7 @@ index 0000000..f9508ae
 +    }
 +
 +    @Override protected void onStop() {
++        active = false;
 +        timer.removeCallbacks(checkStall);
 +        timer.removeCallbacks(savePosition);
 +        storeProgress();
@@ -852,10 +909,10 @@ index 0000000..f9508ae
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
 new file mode 100644
-index 0000000..d08b286
+index 0000000..055c5b4
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,452 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.content.Context;
@@ -1301,9 +1358,15 @@ index 0000000..d08b286
 +        enqueue(() -> request("/v1/rumble/channel?url=" + java.net.URLEncoder.encode(channelUrl, "UTF-8"),
 +                "GET", null, prefs.getString("token", "")), done);
 +    }
++
++    /** Video details are fetched on demand: search results contain no playable streams. */
++    public void rumbleVideo(String videoUrl, Callback done) {
++        enqueue(() -> request("/v1/rumble/video?url=" + java.net.URLEncoder.encode(videoUrl, "UTF-8"),
++                "GET", null, prefs.getString("token", "")), done);
++    }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-index ee6b2ce..de12892 100644
+index ee6b2ce..33e7c57 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 @@ -51,6 +51,9 @@ import com.liskovsoft.mediaserviceinterfaces.SignInService;
@@ -1429,7 +1492,7 @@ index ee6b2ce..de12892 100644
 +        List<Video> found = new ArrayList<>();
 +        for (int i = 0; i < results.length(); i++) {
 +            JSONObject item = results.optJSONObject(i);
-+            if (item == null || TextUtils.isEmpty(item.optString("streamUrl"))) continue;
++            if (item == null || TextUtils.isEmpty(item.optString("url"))) continue;
 +            Video card = new Video();
 +            card.videoId = "rumble:" + item.optString("id");
 +            card.title = item.optString("title");

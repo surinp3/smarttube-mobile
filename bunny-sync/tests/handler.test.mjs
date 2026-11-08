@@ -205,3 +205,62 @@ test("Rumble channel discovery rejects arbitrary URLs and needs a server key", a
   const noKey = await h.request("GET", "/v1/rumble/channel?url=https%3A%2F%2Frumble.com%2Fc%2Fpat", undefined, phone.body.deviceToken);
   assert.equal(noKey.status, 503);
 });
+
+test("Rumble search cards without streams resolve playable media on opening", async () => {
+  const requests = [];
+  const h = harness({
+    rumbleApiKey: "server-only-rumble-key",
+    fetch: async (url) => {
+      const endpoint = new URL(String(url));
+      requests.push(endpoint);
+      if (endpoint.pathname.endsWith("/search")) return Response.json({ videos: [{
+        id: "v79xhhm", title: "Example", duration: "1:02:03",
+        url: "https://rumble.com/v79xhhm-example.html",
+        thumbnail: "https://hugh.cdn.rumble.cloud/example.jpg",
+        channel: { name: "Example Channel", url: "https://rumble.com/c/ExampleChannel" },
+      }] });
+      return Response.json({
+        id: "v79xhhm", title: "Example", duration_s: 3723,
+        url: "https://rumble.com/v79xhhm-example.html",
+        hls: "https://rumble.com/hls-vod/example/playlist.m3u8",
+        channel: { name: "Example Channel", url: "https://rumble.com/c/ExampleChannel" },
+        files: [
+          { kind: "tar", url: "https://hugh.cdn.rumble.cloud/video.tar?r_file=chunklist.m3u8" },
+          { type: "mp4", url: "https://hugh.cdn.rumble.cloud/video.mp4", quality_text: "720p" },
+        ],
+      });
+    },
+  });
+  const phone = await h.bootstrap();
+  const token = phone.body.deviceToken;
+  const listing = await h.request("GET", "/v1/rumble/search?q=example", undefined, token);
+  assert.equal(listing.status, 200);
+  assert.equal(listing.body.videos[0].durationMs, 3723000);
+  assert.equal(listing.body.videos[0].streamUrl, null);
+  const address = encodeURIComponent(listing.body.videos[0].url);
+  const resolved = await h.request("GET", `/v1/rumble/video?url=${address}`, undefined, token);
+  assert.equal(resolved.status, 200);
+  assert.equal(resolved.body.video.streamUrl, "https://rumble.com/hls-vod/example/playlist.m3u8");
+  assert.equal(resolved.body.video.files.length, 1);
+  assert.equal(resolved.body.video.files[0].type, "mp4");
+  assert.equal(JSON.stringify(resolved.body).includes("server-only-rumble-key"), false);
+  assert.ok(requests[1].pathname.endsWith("/rumble/v1/video"));
+  assert.equal(requests[1].searchParams.get("url"), "https://rumble.com/v79xhhm-example.html");
+  const cached = await h.request("GET", `/v1/rumble/video?url=${address}`, undefined, token);
+  assert.equal(cached.status, 200);
+  assert.equal(cached.body.cached, true);
+  assert.equal(requests.length, 2);
+});
+
+test("Rumble video detail blocks other origins and unpaired users", async () => {
+  const h = harness();
+  const address = encodeURIComponent("https://rumble.com/v79xhhm-example.html");
+  const denied = await h.request("GET", `/v1/rumble/video?url=${address}`);
+  assert.equal(denied.status, 401);
+  const phone = await h.bootstrap();
+  const bad = await h.request("GET", `/v1/rumble/video?url=${encodeURIComponent("https://example.com/v79xhhm")}`,
+    undefined, phone.body.deviceToken);
+  assert.equal(bad.status, 400);
+  const unavailable = await h.request("GET", `/v1/rumble/video?url=${address}`, undefined, phone.body.deviceToken);
+  assert.equal(unavailable.status, 503);
+});
