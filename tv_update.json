@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v9/SmartTube-Pat-TV-v9-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v10/SmartTube-Pat-TV-v10-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v9/SmartTube-Pat-TV-v9-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v10/SmartTube-Pat-TV-v10-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v9/SmartTube-Pat-TV-v9-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v10/SmartTube-Pat-TV-v10-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -56,6 +56,14 @@
       "Adds a high-contrast frame around the focused TV video card and rounds the card corners",
       "Shows a YouTube or Rumble icon in the top-right of each video thumbnail",
       "Keeps titles visible below the thumbnails"
+    ]
+  },
+  "32.69-tv.10": {
+    "versionCode": 3010,
+    "changelog": [
+      "Uses Android rounding for video cards while keeping the focus frame, titles and source icons",
+      "Falls back to subscriptions or Trending if YouTube recommendations come back empty",
+      "Shows available YouTube videos without waiting for Rumble, and keeps looking for saved Rumble results after an allowance error"
     ]
   }
 }
