@@ -125,7 +125,7 @@ index 5e3ed0317..ac0298688 100644
                  context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
          settingItems.add(new SettingsItem(
 diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
-index cc8cdb0ed..d7cbb20db 100644
+index 8af36837e..131c2ad92 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -216,6 +216,8 @@ dependencies {
@@ -1218,10 +1218,10 @@ index 000000000..ff290908f
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
 new file mode 100644
-index 000000000..9e986772a
+index 000000000..e88249a81
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
-@@ -0,0 +1,496 @@
+@@ -0,0 +1,500 @@
 +package com.liskovsoft.smartyoutubetv2.mobile.sync;
 +
 +import android.content.Context;
@@ -1663,6 +1663,10 @@ index 000000000..9e986772a
 +                "GET", null, prefs.getString("token", "")), done);
 +    }
 +
++    public void rumbleLive(Callback done) {
++        enqueue(() -> request("/v1/rumble/live", "GET", null, prefs.getString("token", "")), done);
++    }
++
 +    public void rumbleHome(Callback done) {
 +        enqueue(() -> {
 +            String token = prefs.getString("token", "");
@@ -1719,7 +1723,7 @@ index 000000000..9e986772a
 +    }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
-index ee6b2ce4d..af130dd36 100644
+index ee6b2ce4d..48e11cd2f 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/ui/MobileBrowseActivity.java
 @@ -51,6 +51,9 @@ import com.liskovsoft.mediaserviceinterfaces.SignInService;
@@ -1999,8 +2003,89 @@ index ee6b2ce4d..af130dd36 100644
          }
      }
  
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/adapter/VideoGroupObjectAdapter.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/adapter/VideoGroupObjectAdapter.java
+index 1b760d311..5822c5fa0 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/adapter/VideoGroupObjectAdapter.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/adapter/VideoGroupObjectAdapter.java
+@@ -15,7 +15,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
+ 
+ public class VideoGroupObjectAdapter extends ObjectAdapter {
+     private static final WeakHashSet<VideoGroupObjectAdapter> sAdapterRegistry = new WeakHashSet<>();
++    private static final int MAX_TOPIC_RUMBLE_CARDS = 5;
+     private final List<Video> mVideoItems = new ArrayList<>();
++    private final List<Video> mTopicRumbleCards = new ArrayList<>();
+     // CopyOnWriteArrayList to fix Fatal Exception: java.lang.ArrayIndexOutOfBoundsException: length=10; index=-1
+     private final List<VideoGroup> mVideoGroups = new CopyOnWriteArrayList<>(); // keep groups from being garbage collected
+     private static final int TYPE_ADD = 0;
+@@ -94,11 +96,34 @@ public class VideoGroupObjectAdapter extends ObjectAdapter {
+         add(VideoGroup.from(videos));
+     }
+ 
++    public void addTopicRumble(List<Video> cards) {
++        if (mVideoItems.isEmpty() || !mTopicRumbleCards.isEmpty()) return;
++        int capacity = Math.min(MAX_TOPIC_RUMBLE_CARDS, Math.max(1, (mVideoItems.size() - 1) / 2));
++        for (Video card : cards) {
++            if (mTopicRumbleCards.contains(card)) continue;
++            // Keep the last YouTube item as the row's continuation anchor.
++            int position = Math.min(2 + 3 * mTopicRumbleCards.size(), mVideoItems.size() - 1);
++            mTopicRumbleCards.add(card);
++            mVideoItems.add(position, card);
++            notifyItemRangeInserted(position, 1);
++            if (mTopicRumbleCards.size() == capacity) break;
++        }
++    }
++
++    public Video getLastSourceVideo() {
++        for (int i = mVideoItems.size() - 1; i >= 0; i--) {
++            Video video = mVideoItems.get(i);
++            if (!mTopicRumbleCards.contains(video)) return video;
++        }
++        return null;
++    }
++
+     private void prepend(VideoGroup group) {
+         int begin = mVideoItems.size();
+ 
+         if (mVideoGroups.contains(group)) {
+-            mVideoItems.addAll(0, group.getVideos().subList(begin, group.getVideos().size()));
++            int sourceCount = begin - mTopicRumbleCards.size();
++            mVideoItems.addAll(0, group.getVideos().subList(sourceCount, group.getVideos().size()));
+         } else {
+             mVideoItems.addAll(0, group.getVideos());
+             mVideoGroups.add(0, group);
+@@ -113,10 +138,11 @@ public class VideoGroupObjectAdapter extends ObjectAdapter {
+ 
+         if (mVideoGroups.contains(group)) {
+             int end = group.getVideos().size();
+-            if (begin > end) {
++            int sourceCount = begin - mTopicRumbleCards.size();
++            if (sourceCount > end) {
+                 mVideoItems.addAll(group.getVideos());
+             } else {
+-                mVideoItems.addAll(group.getVideos().subList(begin, end));
++                mVideoItems.addAll(group.getVideos().subList(sourceCount, end));
+             }
+         } else {
+             mVideoItems.addAll(group.getVideos());
+@@ -168,6 +194,7 @@ public class VideoGroupObjectAdapter extends ObjectAdapter {
+     public void clear() {
+         int itemCount = mVideoItems.size();
+         mVideoItems.clear();
++        mTopicRumbleCards.clear();
+         mVideoGroups.clear();
+         if (itemCount != 0) {
+             // NOTE: Crashes RecycleView IndexOutOfBoundsException when doing add immediately after clear
+@@ -180,7 +207,7 @@ public class VideoGroupObjectAdapter extends ObjectAdapter {
+             while (true) { // remove all occurrences of the same element (if present)
+                 int index = mVideoItems.indexOf(video);
+                 if (index != -1) {
+-                    mVideoItems.remove(video);
++                    mTopicRumbleCards.remove(mVideoItems.remove(index));
+                     notifyItemRangeRemoved(index, 1);
+                     removeFromGroup(video);
+                 } else {
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
-index 648aa8d42..b5291a1f0 100644
+index 648aa8d42..abe834fb9 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/BrowseFragment.java
 @@ -7,6 +7,7 @@ import android.os.Looper;
@@ -2028,10 +2113,10 @@ index 648aa8d42..b5291a1f0 100644
  import com.liskovsoft.smartyoutubetv2.tv.R;
  import com.liskovsoft.smartyoutubetv2.tv.presenter.IconHeaderItemPresenter;
  import com.liskovsoft.smartyoutubetv2.tv.ui.browse.dialog.ErrorDialogFragment;
++import com.liskovsoft.smartyoutubetv2.tv.ui.browse.video.MultipleRowsFragment;
  import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.headers.ExtendedHeadersSupportFragment;
  import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.misc.ProgressBarManager;
  
-+import java.util.Collections;
  import java.util.HashMap;
 +import java.util.List;
  import java.util.Map;
@@ -2066,22 +2151,16 @@ index 648aa8d42..b5291a1f0 100644
              return -1;
          }
  
-@@ -309,12 +321,62 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -309,12 +321,56 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
      @Override
      public void updateSection(VideoGroup group) {
          restoreMainFragment();
 -
 +        BrowseSection section = group == null ? null : group.getSection();
-+        if (mPatSync != null && section != null && group.getPosition() >= 0 &&
-+                (section.getId() == BrowsePresenter.PAT_BOTH ||
-+                 section.getId() == MediaGroup.TYPE_HOME && "both".equals(mPatSync.sourceFilter()))) {
-+            // Keep the Rumble row visible even if YouTube's rows arrive later.
-+            group.setPosition(group.getPosition() + 1);
-+        }
          mSectionFragmentFactory.updateCurrentFragment(group);
 +        if (mPatSync != null && section != null && group.getAction() == VideoGroup.ACTION_REPLACE && group.isEmpty()) {
 +            if (section.getId() == MediaGroup.TYPE_HOME) mHomeSource = mPatSync.sourceFilter();
-+            loadRumbleRow(section);
++            configureRumbleFeed(section);
 +        }
  
          fixInvisibleSearchOrb();
@@ -2092,27 +2171,27 @@ index 648aa8d42..b5291a1f0 100644
 +        return mPatSync == null || !"rumble".equals(mPatSync.sourceFilter());
 +    }
 +
-+    private void loadRumbleRow(BrowseSection section) {
++    private void configureRumbleFeed(BrowseSection section) {
 +        if (mPatSync == null || section == null) return;
 +        int sectionId = section.getId();
-+        boolean rumbleOnly = sectionId == BrowsePresenter.PAT_RUMBLE;
 +        boolean home = sectionId == MediaGroup.TYPE_HOME;
-+        if (!home && !rumbleOnly && sectionId != BrowsePresenter.PAT_BOTH) return;
++        boolean mixed = sectionId == BrowsePresenter.PAT_BOTH || home && "both".equals(mPatSync.sourceFilter());
 +        Fragment rows = mSectionFragmentFactory.getCurrentFragment();
-+        int request = ++mRumbleRequest;
-+        if (home && "youtube".equals(mPatSync.sourceFilter())) {
-+            updateRumbleRow(section, Collections.emptyList());
-+            return;
++        if (rows instanceof MultipleRowsFragment) {
++            ((MultipleRowsFragment) rows).setRumbleTopics(mixed ? mPatSync : null);
 +        }
++        if (sectionId != BrowsePresenter.PAT_RUMBLE && !(home && !showYouTubeHome())) return;
++
++        int request = ++mRumbleRequest;
 +        mPatSync.rumbleHome(result -> {
 +            if (request != mRumbleRequest || getView() == null ||
 +                    getSelectedHeaderId() != sectionId || rows != mSectionFragmentFactory.getCurrentFragment()) return;
 +            if (result.ok()) {
 +                List<Video> cards = PatRumbleCards.from(result.data, mPatSync);
 +                updateRumbleRow(section, cards);
-+                if (cards.isEmpty() && (rumbleOnly || home && !showYouTubeHome()))
++                if (cards.isEmpty())
 +                    Toast.makeText(requireContext(), "No Rumble videos available", Toast.LENGTH_LONG).show();
-+            } else if (rumbleOnly || home && !showYouTubeHome()) {
++            } else {
 +                Toast.makeText(requireContext(), result.message, Toast.LENGTH_LONG).show();
 +            }
 +        });
@@ -2130,7 +2209,7 @@ index 648aa8d42..b5291a1f0 100644
      @Override
      public void updateSection(SettingsGroup group) {
          restoreMainFragment();
-@@ -470,6 +532,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
+@@ -470,6 +526,15 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView
          }
  
          mIsFragmentCreated = false;
@@ -2140,25 +2219,146 @@ index 648aa8d42..b5291a1f0 100644
 +            if (section == MediaGroup.TYPE_HOME && !mPatSync.sourceFilter().equals(mHomeSource)) {
 +                mBrowsePresenter.refresh(false);
 +            } else {
-+                loadRumbleRow(mSections.get(section));
++                configureRumbleFeed(mSections.get(section));
 +            }
 +        });
      }
  
      /**
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/GridFragmentHelper.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/GridFragmentHelper.java
+index 5438f87d5..3288988c0 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/GridFragmentHelper.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/GridFragmentHelper.java
+@@ -9,6 +9,7 @@ import android.util.Pair;
+ import android.view.WindowManager;
+ 
+ import com.liskovsoft.sharedutils.helpers.Helpers;
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+ import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
+ import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+@@ -176,7 +177,8 @@ public class GridFragmentHelper {
+         if (adapter.isEmpty())
+             return false;
+ 
+-        VideoGroup lastGroup = adapter.getAll().get(adapter.size() - 1).getGroup();
++        Video lastVideo = adapter.getLastSourceVideo();
++        VideoGroup lastGroup = lastVideo == null ? null : lastVideo.getGroup();
+         boolean matchedRowFound = lastGroup != null
+                 && lastGroup.getMediaGroup() != null
+                 && lastGroup.getMediaGroup().getNextPageKey() == null
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
-index ab21c3eb9..5114d6c48 100644
+index ab21c3eb9..bdf67af8a 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/MultipleRowsFragment.java
-@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+@@ -1,6 +1,7 @@
+ package com.liskovsoft.smartyoutubetv2.tv.ui.browse.video;
+ 
+ import android.os.Bundle;
++import android.view.View;
+ import android.widget.Toast;
+ import androidx.annotation.Nullable;
+ import androidx.leanback.app.RowsSupportFragment;
+@@ -22,6 +23,9 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
  import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
  import com.liskovsoft.smartyoutubetv2.common.app.presenters.interfaces.VideoGroupPresenter;
  import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 +import com.liskovsoft.smartyoutubetv2.mobile.sync.PatRumbleCards;
++import com.liskovsoft.smartyoutubetv2.mobile.sync.PatSyncClient;
++import com.liskovsoft.smartyoutubetv2.tv.R;
  import com.liskovsoft.smartyoutubetv2.tv.adapter.VideoGroupObjectAdapter;
  import com.liskovsoft.smartyoutubetv2.tv.presenter.ChannelHeaderPresenter;
  import com.liskovsoft.smartyoutubetv2.tv.presenter.ChannelHeaderPresenter.ChannelHeaderCallback;
-@@ -329,7 +330,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -37,8 +41,10 @@ import com.liskovsoft.smartyoutubetv2.tv.util.ViewUtil;
+ import java.lang.ref.WeakReference;
+ import java.util.ArrayList;
+ import java.util.HashMap;
++import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Set;
+ 
+ public abstract class MultipleRowsFragment extends RowsSupportFragment implements VideoSection {
+     private static final String TAG = MultipleRowsFragment.class.getSimpleName();
+@@ -52,6 +58,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+     private ShortsCardPresenter mShortsPresenter;
+     private int mSelectedRowIndex = -1;
+     private ChannelHeaderCallback mChannelHeaderCallback;
++    private PatSyncClient mRumbleTopics;
++    private final Set<VideoGroupObjectAdapter> mTopicRequests = new HashSet<>();
++    private Runnable mPendingTopic;
+ 
+     @Override
+     public void onCreate(@Nullable Bundle savedInstanceState) {
+@@ -109,8 +118,67 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+         mShortsPresenter.setOnItemViewLongPressedListener(new ItemViewLongPressedListener());
+     }
+ 
++    public void setRumbleTopics(PatSyncClient sync) {
++        mRumbleTopics = sync;
++        if (mRowsAdapter != null && getSelectedPosition() >= 0 && getSelectedPosition() < mRowsAdapter.size()) {
++            Object row = mRowsAdapter.get(getSelectedPosition());
++            if (row instanceof ListRow) queueRumbleTopic((ListRow) row);
++        }
++    }
++
++    @Override
++    public void onDestroyView() {
++        cancelPendingTopic();
++        super.onDestroyView();
++    }
++
++    private void cancelPendingTopic() {
++        if (mPendingTopic != null && getView() != null) getView().removeCallbacks(mPendingTopic);
++        mPendingTopic = null;
++    }
++
++    private void queueRumbleTopic(ListRow row) {
++        cancelPendingTopic();
++        PatSyncClient sync = mRumbleTopics;
++        View view = getView();
++        if (sync == null || !sync.paired() || view == null) return;
++        if (!(row.getAdapter() instanceof VideoGroupObjectAdapter) || row.getHeaderItem() == null) return;
++        VideoGroupObjectAdapter adapter = (VideoGroupObjectAdapter) row.getAdapter();
++        String title = row.getHeaderItem().getName();
++        String topic = title == null ? "" : title.trim();
++        if (topic.length() < 2 || mTopicRequests.contains(adapter)) return;
++
++        mPendingTopic = () -> {
++            mPendingTopic = null;
++            if (mRumbleTopics != sync || !mVideoGroupAdapters.containsValue(adapter) ||
++                    !mTopicRequests.add(adapter)) return;
++            PatSyncClient.Callback reply = result -> {
++                if (mRumbleTopics != sync || !mVideoGroupAdapters.containsValue(adapter)) return;
++                if (getView() != view) {
++                    mTopicRequests.remove(adapter);
++                    return;
++                }
++                if (result.ok()) {
++                    adapter.addTopicRumble(PatRumbleCards.from(result.data, sync));
++                } else if (result.code != 429) {
++                    mTopicRequests.remove(adapter);
++                }
++            };
++            // The untitled YouTube recommendation group uses a generic label.
++            if (topic.equals(getString(R.string.suggestions)) || "Recommended".equalsIgnoreCase(topic)) {
++                sync.rumbleLive(reply);
++            } else {
++                sync.rumbleSearch(topic.substring(0, Math.min(topic.length(), 100)), reply);
++            }
++        };
++        // Focus can pass through several rows during a single D-pad scroll.
++        view.postDelayed(mPendingTopic, 300);
++    }
++
+     @Override
+     public void clear() {
++        cancelPendingTopic();
++        mTopicRequests.clear();
+         if (mRowsAdapter != null) {
+             mRowsAdapter.clear();
+             if (mChannelHeaderCallback != null) {
+@@ -329,7 +397,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
          public void onItemLongPressed(Presenter.ViewHolder itemViewHolder, Object item) {
  
              if (item instanceof Video) {
@@ -2168,7 +2368,7 @@ index ab21c3eb9..5114d6c48 100644
              } else {
                  Toast.makeText(getActivity(), item.toString(), Toast.LENGTH_SHORT).show();
              }
-@@ -342,7 +344,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -342,7 +411,9 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
                                    RowPresenter.ViewHolder rowViewHolder, Row row) {
  
              if (item instanceof Video) {
@@ -2179,7 +2379,12 @@ index ab21c3eb9..5114d6c48 100644
              } else {
                  Toast.makeText(getActivity(), item.toString(), Toast.LENGTH_SHORT).show();
              }
-@@ -356,9 +360,11 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+@@ -353,12 +424,16 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+         @Override
+         public void onItemSelected(Presenter.ViewHolder itemViewHolder, Object item,
+                                    RowPresenter.ViewHolder rowViewHolder, Row row) {
++            if (row instanceof ListRow) queueRumbleTopic((ListRow) row);
++            else cancelPendingTopic();
              if (item instanceof Video) {
                  mBackgroundManager.setBackgroundFrom((Video) item);
  
@@ -2194,6 +2399,16 @@ index ab21c3eb9..5114d6c48 100644
              }
          }
  
+@@ -369,7 +444,8 @@ public abstract class MultipleRowsFragment extends RowsSupportFragment implement
+                 if (index != -1) {
+                     int size = adapter.size();
+                     if (index > (size - ViewUtil.ROW_SCROLL_CONTINUE_NUM)) {
+-                        mMainPresenter.onScrollEnd((Video) adapter.get(size - 1));
++                        Video last = adapter.getLastSourceVideo();
++                        if (last != null) mMainPresenter.onScrollEnd(last);
+                     }
+                     break;
+                 }
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
 index d50cc392b..06a7b910d 100644
 --- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
