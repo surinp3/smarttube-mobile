@@ -42,10 +42,14 @@ async function call(baseUrl, method, path, body, token) {
 
 test("VPS service authenticates phone, pairs TV, and persists settings across restarts", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "smarttube-vps-test-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
   const dbFile = join(directory, "sync.sqlite");
   const first = await listen(dbFile);
-  t.after(() => first.close().catch(() => {}));
+  let second;
+  t.after(async () => {
+    await first.close();
+    await second?.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
 
   const health = await call(first.baseUrl, "GET", "/health");
   assert.equal(health.status, 200);
@@ -83,8 +87,7 @@ test("VPS service authenticates phone, pairs TV, and persists settings across re
   assert.equal(conflict.status, 409);
 
   await first.close();
-  const second = await listen(dbFile);
-  t.after(() => second.close().catch(() => {}));
+  second = await listen(dbFile);
   const restored = await call(second.baseUrl, "GET", "/v1/state", undefined, pairing.body.pendingToken);
   assert.equal(restored.status, 200);
   assert.equal(restored.body.revision, 1);

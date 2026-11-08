@@ -6,6 +6,7 @@ import { createSyncHandler } from "../bunny-sync/handler.mjs";
 import { SQLiteAdapter } from "./sqlite.mjs";
 
 const MIN_SETUP_LENGTH = 20;
+const RELEASE_VERSION = "1.1";
 
 function headersFromNode(request) {
   const headers = new Headers();
@@ -39,6 +40,7 @@ export function createSyncServer({ database, setupCode, rumbleApiKey = "", onErr
   });
 
   return createServer(async (incoming, outgoing) => {
+    outgoing.setHeader("X-SmartTube-Version", RELEASE_VERSION);
     try {
       // Ignore untrusted Host/X-Forwarded-* values when constructing the URL.
       if (!incoming.url?.startsWith("/") || incoming.url.startsWith("//")) {
