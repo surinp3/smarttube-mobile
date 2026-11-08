@@ -108,8 +108,8 @@ index 51c0242..caa704c 100644
 +            applicationId "app.smarttube.pattv"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 3007
-+            versionNameSuffix "-tv.7"
++            versionCode 3008
++            versionNameSuffix "-tv.8"
 +            matchingFallbacks = ['ststable']
 +        }
      }
