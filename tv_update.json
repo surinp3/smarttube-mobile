@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v8/SmartTube-Pat-TV-v8-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v9/SmartTube-Pat-TV-v9-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v8/SmartTube-Pat-TV-v8-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v9/SmartTube-Pat-TV-v9-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v8/SmartTube-Pat-TV-v8-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v9/SmartTube-Pat-TV-v9-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -48,6 +48,14 @@
       "Home uses the same mixed YouTube and Rumble categories as Both",
       "Videos wrap into a vertical grid so you can scroll down through each category",
       "Recent uploads from both services appear first, newest first where dates are available"
+    ]
+  },
+  "32.69-tv.9": {
+    "versionCode": 3009,
+    "changelog": [
+      "Adds a high-contrast frame around the focused TV video card and rounds the card corners",
+      "Shows a YouTube or Rumble icon in the top-right of each video thumbnail",
+      "Keeps titles visible below the thumbnails"
     ]
   }
 }
