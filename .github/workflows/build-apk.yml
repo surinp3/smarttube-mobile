@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Publish a signed v13 release for in-app updates'
+        description: 'Publish a signed v14 release for in-app updates'
         required: false
         type: boolean
         default: false
@@ -38,6 +38,8 @@ jobs:
           git -C upstream/MediaServiceCore checkout "$mediaservice_pin"
           git -C upstream apply --check ../mobile.patch
           git -C upstream apply ../mobile.patch
+          git -C upstream apply --check ../pat-sync.patch
+          git -C upstream apply ../pat-sync.patch
           git -C upstream/MediaServiceCore apply --check ../../mediaservice.patch
           git -C upstream/MediaServiceCore apply ../../mediaservice.patch
           chmod +x upstream/gradlew
@@ -99,11 +101,11 @@ jobs:
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v13-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v13-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v14-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v14-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v13-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v13-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v14-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v14-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -124,17 +126,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v13-ARM64-APK
+          name: SmartTube-Mobile-v14-ARM64-APK
           path: output
       - name: Publish release used by the in-app updater
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v13 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v13 is already published; increment the mobile version for the next release."
+          if gh release view v14 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v14 is already published; increment the mobile version for the next release."
           else
-            gh release create v13 output/SmartTube-Mobile-v13-ARM64.apk \
+            gh release create v14 output/SmartTube-Mobile-v14-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" \
-              --title "SmartTube Mobile v13" \
-              --notes "Adds Settings > Home screen > Hide Shorts on Home (enabled by default), filtering Shorts from both the initial YouTube Home recommendations and subsequent pages. The toggle is saved on-device; Search, Subscriptions and History stay unchanged. Keeps signed production updates, top-aligned thumbnails, watched-progress indicators, sign-in, and mobile navigation."
+              --title "SmartTube Mobile v14 — Rumble and Bunny sync" \
+              --notes "Adds a combined YouTube/Rumble card feed, Rumble follow controls and HLS/MP4 fallback playback, Bunny Edge sync from the phone and one-time code approval for Google TV. Bunny and third-party Rumble services require separate server activation; existing YouTube playback and signed updater remain available."
           fi

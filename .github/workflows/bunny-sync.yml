@@ -1,0 +1,59 @@
+name: Bunny sync service
+
+on:
+  pull_request:
+    paths:
+      - 'bunny-sync/**'
+      - '.github/workflows/bunny-sync.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'bunny-sync/**'
+      - '.github/workflows/bunny-sync.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy the tested Edge Script to Bunny (requires Bunny deploy secrets)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test pairing, authentication and state conflicts
+        run: node --test bunny-sync/tests/*.test.mjs
+      - name: Bundle Edge Script for Bunny deployment
+        run: |
+          npx --yes esbuild@0.25.12 bunny-sync/edge-script.ts \
+            --bundle --platform=neutral --format=esm --target=es2022 \
+            '--external:npm:*' --outfile=bunny-sync/dist/smarttube-sync.js
+          test -s bunny-sync/dist/smarttube-sync.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bunny-sync-edge-script-TEST-ONLY
+          path: bunny-sync/dist/smarttube-sync.js
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bunny-sync-edge-script-TEST-ONLY
+          path: bunny-sync/dist
+      - name: Publish Bunny Edge Script
+        uses: BunnyWay/actions/deploy-script@main
+        with:
+          script_id: ${{ secrets.BUNNY_SYNC_SCRIPT_ID }}
+          deploy_key: ${{ secrets.BUNNY_SYNC_DEPLOY_KEY }}
+          file: bunny-sync/dist/smarttube-sync.js
