@@ -1,12 +1,12 @@
 {
   "package": {
+    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v4/SmartTube-Pat-TV-v4-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v3/SmartTube-Pat-TV-v3-ARMv7.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v4/SmartTube-Pat-TV-v4-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v3/SmartTube-Pat-TV-v3-ARM64.apk"
-    ],
-    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v3/SmartTube-Pat-TV-v3-Universal.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v4/SmartTube-Pat-TV-v4-ARM64.apk"
+    ]
   },
   "32.69-tv.3": {
     "versionCode": 3003,
@@ -16,6 +16,15 @@
       "Uses direct HLS/MP4 playback with alternate stream fallback for Rumble videos",
       "Bunny server and Rumble API activation are required before cloud sync or Rumble discovery works",
       "Preserves SmartTube YouTube playback, rollback recovery, signed updates and Google TV Streamer-compatible ARMv7/Universal APKs"
+    ]
+  },
+  "32.69-tv.4": {
+    "versionCode": 3004,
+    "changelog": [
+      "Adds YouTube, Rumble and Both to the main TV sidebar",
+      "Shows Rumble alongside YouTube on Home in Both mode",
+      "Uses followed Rumble channels or live videos when you have no follows",
+      "Requests Android media audio focus for Rumble playback"
     ]
   }
 }
