@@ -7,7 +7,7 @@ import { SQLiteAdapter } from "./sqlite.mjs";
 import { fetchPublicRumbleFeed, fetchPublicRumbleVideo } from "./rumble-public.mjs";
 
 const MIN_SETUP_LENGTH = 20;
-const RELEASE_VERSION = "1.4";
+const RELEASE_VERSION = "1.4.1";
 
 function headersFromNode(request) {
   const headers = new Headers();

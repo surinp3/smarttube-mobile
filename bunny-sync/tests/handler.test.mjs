@@ -281,6 +281,7 @@ test("Rumble Home can discover live videos before any channels are followed", as
       return Response.json({ streams: [{
         id: "v79xhhm", title: "Live event", live: true,
         url: "https://rumble.com/v79xhhm-live-event.html",
+        video_id: 449944194,
       }], next_page: 2 });
     },
   });
@@ -289,6 +290,7 @@ test("Rumble Home can discover live videos before any channels are followed", as
   const token = phone.body.deviceToken;
   const feed = await h.request("GET", "/v1/rumble/live", undefined, token);
   assert.equal(feed.status, 200);
+  assert.equal(feed.body.videos[0].rumbleId, 449944194);
   assert.equal(feed.body.videos[0].id, "v79xhhm");
   assert.equal(feed.body.videos[0].live, true);
   assert.equal(feed.body.nextPage, 2);

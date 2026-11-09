@@ -218,6 +218,10 @@ function normalizeRumbleVideo(value) {
   if (!isObject(value) || !limitedString(value.id, 100) ||
       !limitedString(value.title, 600)) return null;
   const channel = isObject(value.channel) ? value.channel : {};
+  const rumbleId = value.rumble_id ?? value.video_id ?? (
+    typeof value.embed_id === "string" && /^v[a-z0-9]{1,12}$/i.test(value.embed_id)
+      ? Number.parseInt(value.embed_id.slice(1), 36) : null
+  );
   const files = Array.isArray(value.files) ? value.files
     .filter((file) => isObject(file) && httpsUrlOrNull(file.url) &&
       (file.type === "hls" || file.type === "mp4" ||
@@ -231,7 +235,7 @@ function normalizeRumbleVideo(value) {
   return {
     provider: "rumble",
     id: value.id.slice(0, 100),
-    ...(Number.isSafeInteger(value.rumble_id) && value.rumble_id > 0 ? { rumbleId: value.rumble_id } : {}),
+    ...(Number.isSafeInteger(rumbleId) && rumbleId > 0 ? { rumbleId } : {}),
     url: httpsUrlOrNull(value.url),
     title: value.title.slice(0, 600),
     thumbnail: httpsUrlOrNull(value.thumbnail),
