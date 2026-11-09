@@ -181,7 +181,7 @@ diff --git a/smarttubetv/build.gradle b/smarttubetv/build.gradle
 index ae5b34d94..ce597dc3f 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
-@@ -181,8 +181,8 @@ android {
+@@ -181,7 +181,7 @@ android {
              applicationId "app.smarttube.mobile"
              minSdkVersion 23
              targetSdkVersion project.properties.compileSdkVersion
@@ -191,7 +191,6 @@ index ae5b34d94..ce597dc3f 100644
 +            versionNameSuffix "-mobile.17"
              matchingFallbacks = ['ststable']
          }
-     }
 @@ -208,6 +208,8 @@ dependencies {
      //////// BEGIN EXOPLAYER /////////
  
