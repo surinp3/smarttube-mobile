@@ -8,8 +8,9 @@ Supabase, Bunny account or database cloud service is required.
 
 - Phone authorization with a private setup code and 10-digit TV pairing.
 - Rumble follows, watched position, sidebar order and YouTube/Rumble/Both mode.
-- Rumble search/channel feed and stream resolution through the optional
-  **API.SH** Rumble provider key, kept on the VPS only.
+- Rumble browsing and playback. Known videos use Rumble's public embed player
+  for playback. The optional VPS-only **API.SH** key covers discovery that
+  Rumble's website blocks and older video URLs without an embed ID.
 - Conflict protection when the phone and TV edit data at the same time.
 
 Your existing signed-in YouTube account and subscriptions still communicate
@@ -25,8 +26,8 @@ the VPS, and HTTPS provided by the VPS's existing reverse proxy or Caddy.
    `SMARTTUBE_SETUP_CODE` of at least 20 random characters. For example,
    generate a code with `openssl rand -hex 32`. Keep the code out of GitHub
    and out of chat; enter it only into the **phone** during initial setup.
-3. Set the optional `APISH_KEY` in `.env` if Rumble discovery and playback
-   are required. It is not placed in the Android apps.
+3. Set the optional `APISH_KEY` in `.env` for fallback Rumble discovery and
+   legacy video URLs. Keep the key on the VPS.
 4. Run `docker compose up -d --build` from this folder. The container uses a
    durable named volume for SQLite and exposes port 8765 **only on the VPS's
    loopback interface**.
@@ -70,8 +71,8 @@ own independent signed update and recovery workflows.
 
 ### Limitations
 
-- The `APISH_KEY` is a separate third-party API requirement. Hosting the DB on
-  the VPS does not magically make that Rumble service free or available.
+- Search and channel discovery can still depend on API.SH when Rumble's site
+  blocks a listing. Saved listings and Editor's Picks help when requests are limited.
 - This is a single-account sync service intended for Pat's own phone/TV
   devices. Do not present it as a public multi-user platform.
 - The HTTP service itself is deliberately unencrypted on localhost; only

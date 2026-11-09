@@ -2,10 +2,12 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v16** adds **Follow on Rumble** to the YouTube player controls. Choose a matching channel to save it to your synced SmartTube follows.
+Version **v17** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
 
-- **Both** mixes YouTube and Rumble in the Home feed. Rumble uses followed
-  channels or shows live videos when you have no follows.
+- Rumble Home uses followed channels or shows live videos when you have no
+  follows. Rumble's Editor's Picks are a fallback when live discovery is unavailable.
+- **Follow on Rumble** in the YouTube player controls lets you choose a matching
+  channel to save to your synced SmartTube follows.
 - A Rumble player using HTTPS HLS or MP4 with alternate-stream recovery after
   repeated stalls. Local Rumble follows and watched positions are saved.
 - **Settings → Rumble + Bunny sync** opens a shared phone/TV video browser.

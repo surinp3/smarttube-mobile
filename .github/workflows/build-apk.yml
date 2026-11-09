@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Build and stage a signed v16 update'
+        description: 'Build and stage a signed v17 update'
         required: false
         type: boolean
         default: false
@@ -86,6 +86,22 @@ jobs:
           fi
           echo "SIGNED_BUILD=true" >> "$GITHUB_ENV"
 
+      - name: Fetch verified Gradle distribution through the release API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gradle_zip="$RUNNER_TEMP/gradle-7.5-bin.zip"
+          gradle_sha="cb87f222c5585bd46838ad4db78463a5c5f3d336e5e2b98dc7c0c586527351c2"
+          # Use the release API because the browser download route can return HTTP 504.
+          curl --fail --silent --show-error --location --retry 2 \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/gradle/gradle-distributions/releases/assets/127707999" \
+            -o "$gradle_zip"
+          printf '%s  %s\n' "$gradle_sha" "$gradle_zip" | sha256sum --check --strict
+          wrapper=upstream/gradle/wrapper/gradle-wrapper.properties
+          sed -i "s|^distributionUrl=.*|distributionUrl=file://$gradle_zip|" "$wrapper"
+          printf '\ndistributionSha256Sum=%s\n' "$gradle_sha" >> "$wrapper"
+
       - name: Build ARM64 APK
         working-directory: upstream
         run: |
@@ -101,11 +117,11 @@ jobs:
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v16-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v16-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v17-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v17-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v16-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v16-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v17-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v17-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -126,17 +142,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v16-ARM64-APK
+          name: SmartTube-Mobile-v17-ARM64-APK
           path: output
       - name: Stage release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v16 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v16 is already published; increment the mobile version for the next release."
+          if gh release view v17 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v17 is already published; increment the mobile version for the next release."
           else
-            gh release create v16 output/SmartTube-Mobile-v16-ARM64.apk \
+            gh release create v17 output/SmartTube-Mobile-v17-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "SmartTube Mobile v16 — Follow on Rumble" \
-              --notes "Adds Follow on Rumble to the YouTube player controls. Pick a matching Rumble channel to save it to your synced SmartTube follows."
+              --title "SmartTube Mobile v17 — Follow on Rumble" \
+              --notes "Opens on YouTube Home. Use the YouTube and Rumble icons to switch sources. Home shows 19 videos at a time, with Show more for the next batch."
           fi

@@ -4,9 +4,10 @@ import { pathToFileURL } from "node:url";
 import { webcrypto } from "node:crypto";
 import { createSyncHandler } from "../bunny-sync/handler.mjs";
 import { SQLiteAdapter } from "./sqlite.mjs";
+import { fetchPublicRumbleFeed, fetchPublicRumbleVideo } from "./rumble-public.mjs";
 
 const MIN_SETUP_LENGTH = 20;
-const RELEASE_VERSION = "1.3.1";
+const RELEASE_VERSION = "1.4";
 
 function headersFromNode(request) {
   const headers = new Headers();
@@ -36,6 +37,7 @@ export function createSyncServer({ database, setupCode, rumbleApiKey = "", onErr
     crypto: webcrypto,
     setupCode,
     rumbleApiKey,
+    rumblePublic: { feed: fetchPublicRumbleFeed, video: fetchPublicRumbleVideo },
     onError,
   });
 

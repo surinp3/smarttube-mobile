@@ -245,6 +245,33 @@ test("Rumble browsing serves expired cards at its cap and leaves room for playba
   assert.equal(calls, 30);
 });
 
+test("public Rumble fallback can discover and play a video after the API.SH cap", async () => {
+  const video = { id: "v7i283c", title: "A public video", rumble_id: 449944194,
+    url: "https://rumble.com/v7i283c-public-video.html" };
+  const h = harness({
+    rumbleApiKey: "test-key",
+    fetch: async () => assert.fail("should not call API.SH"),
+    rumblePublic: {
+      feed: async (input, editorPicks) => input.mode === "live" && editorPicks ? { videos: [video] } : null,
+      video: async (url, id) => {
+        assert.equal(url, video.url);
+        assert.equal(id, video.rumble_id);
+        return { ...video, hls: "https://video.rumble.com/stream.m3u8" };
+      },
+    },
+  });
+  const token = (await h.bootstrap()).body.deviceToken;
+  h.db.sqlite.prepare("INSERT INTO sync_rate_limits(name, bucket, attempts) VALUES (?, ?, ?)")
+    .run("rumble-fetch", Math.floor(1_800_000_000_000 / 86_400_000), 30);
+  const feed = await h.request("GET", "/v1/rumble/live", undefined, token);
+  assert.equal(feed.status, 200);
+  assert.equal(feed.body.videos[0].rumbleId, video.rumble_id);
+  const detail = await h.request("GET", `/v1/rumble/video?url=${encodeURIComponent(video.url)}`, undefined, token);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.video.streamUrl, "https://video.rumble.com/stream.m3u8");
+  assert.equal(h.db.sqlite.prepare("SELECT attempts FROM sync_rate_limits WHERE name = 'rumble-fetch'").get().attempts, 30);
+});
+
 test("Rumble Home can discover live videos before any channels are followed", async () => {
   const requests = [];
   const h = harness({

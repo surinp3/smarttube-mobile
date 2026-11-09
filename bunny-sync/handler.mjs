@@ -231,6 +231,7 @@ function normalizeRumbleVideo(value) {
   return {
     provider: "rumble",
     id: value.id.slice(0, 100),
+    ...(Number.isSafeInteger(value.rumble_id) && value.rumble_id > 0 ? { rumbleId: value.rumble_id } : {}),
     url: httpsUrlOrNull(value.url),
     title: value.title.slice(0, 600),
     thumbnail: httpsUrlOrNull(value.thumbnail),
@@ -293,8 +294,31 @@ async function rumbleVideos(db, request, config, timestamp) {
   if (cached && cached.expires_at_ms > timestamp) {
     return result(200, { ...JSON.parse(cached.body_json), cached: true });
   }
+  const fresh = async (data, videos, ttlMs) => {
+    const payload = {
+      videos: videos.slice(0, 50).map(normalizeRumbleVideo).filter(Boolean),
+      page: input.page,
+      nextPage: nonnegativeInteger(data.next_page) ? data.next_page : null,
+      channel: input.mode === "channel" && isObject(data.channel) ? {
+        name: String(data.channel.name ?? "").slice(0, 200),
+        url: httpsUrlOrNull(data.channel.url),
+      } : null,
+    };
+    const body = JSON.stringify(payload);
+    if (new TextEncoder().encode(body).length <= 250_000) {
+      await db.prepare(
+        "INSERT INTO rumble_cache(cache_key, body_json, expires_at_ms) VALUES (?, ?, ?) " +
+        "ON CONFLICT(cache_key) DO UPDATE SET body_json = excluded.body_json, expires_at_ms = excluded.expires_at_ms"
+      ).bind(input.cacheKey, body, timestamp + ttlMs).run();
+    }
+    return result(200, { ...payload, cached: false });
+  };
   // Directory entries can outlive their refresh interval. Stream URLs have their own cache.
-  const fallback = (status, error) => {
+  const fallback = async (status, error) => {
+    if (input.mode === "live") {
+      const picks = await config.rumblePublic?.feed(input, true);
+      if (picks) return fresh(picks, picks.videos, 30 * 60_000);
+    }
     if (cached && timestamp - cached.expires_at_ms < 86_400_000) {
       const payload = JSON.parse(cached.body_json);
       const videos = payload.videos.map(({ files, streamUrl, ...video }) => ({
@@ -304,8 +328,10 @@ async function rumbleVideos(db, request, config, timestamp) {
     }
     return result(status, { error });
   };
+  const direct = await config.rumblePublic?.feed(input);
+  if (direct) return fresh(direct, direct.videos, 60 * 60_000);
   if (!limitedString(config.rumbleApiKey, 512)) {
-    return result(503, { error: "Rumble discovery API key not configured" });
+    return fallback(503, "Rumble discovery API key not configured");
   }
   if (!await takeRumbleLookup(db, timestamp, 24)) {
     return fallback(429, "Daily Rumble browsing allowance reached. Saved results are shown when available.");
@@ -325,6 +351,7 @@ async function rumbleVideos(db, request, config, timestamp) {
   } catch {
     return fallback(502, "Rumble directory service unreachable");
   }
+  if (response.status === 429) return fallback(429, "Rumble discovery is temporarily rate limited");
   if (!response.ok) return fallback(502, "Rumble directory service rejected request");
   let data;
   try { data = await response.json(); }
@@ -333,23 +360,11 @@ async function rumbleVideos(db, request, config, timestamp) {
   if (!isObject(data) || !Array.isArray(videos)) {
     return fallback(502, "Rumble directory did not return videos");
   }
-  const payload = {
-    videos: videos.slice(0, 50).map(normalizeRumbleVideo).filter(Boolean),
-    page: input.page,
-    nextPage: nonnegativeInteger(data.next_page) ? data.next_page : null,
-    channel: input.mode === "channel" && isObject(data.channel) ? {
-      name: String(data.channel.name ?? "").slice(0, 200),
-      url: httpsUrlOrNull(data.channel.url),
-    } : null,
-  };
-  const text = JSON.stringify(payload);
-  if (new TextEncoder().encode(text).length <= 250_000) {
-    await db.prepare(
-      "INSERT INTO rumble_cache(cache_key, body_json, expires_at_ms) VALUES (?, ?, ?) " +
-      "ON CONFLICT(cache_key) DO UPDATE SET body_json = excluded.body_json, expires_at_ms = excluded.expires_at_ms"
-    ).bind(input.cacheKey, text, timestamp + 60 * 60 * 1000).run();
+  if (!videos.length && input.mode === "live") {
+    const picks = await config.rumblePublic?.feed(input, true);
+    if (picks) return fresh(picks, picks.videos, 30 * 60_000);
   }
-  return result(200, { ...payload, cached: false });
+  return fresh(data, videos, 60 * 60_000);
 }
 
 // Both request types share a cap of 30 provider calls. Browsing leaves six slots for playback.
@@ -373,6 +388,17 @@ async function rumbleVideo(db, request, config, timestamp) {
     .bind(cacheKey).first();
   if (cached && cached.expires_at_ms > timestamp)
     return result(200, { ...JSON.parse(cached.body_json), cached: true });
+  if (config.rumblePublic) {
+    const previous = cached && JSON.parse(cached.body_json).video?.rumbleId;
+    const mapping = previous ? null : await db.prepare(
+      "SELECT json_extract(card.value, '$.rumbleId') AS id FROM rumble_cache AS cache, " +
+      "json_each(cache.body_json, '$.videos') AS card " +
+      "WHERE lower(json_extract(card.value, '$.url')) = ? " +
+      "AND json_type(card.value, '$.rumbleId') = 'integer' ORDER BY cache.expires_at_ms DESC LIMIT 1"
+    ).bind(videoUrl.toLowerCase()).first();
+    const direct = normalizeRumbleVideo(await config.rumblePublic.video(videoUrl, previous || mapping?.id));
+    if (direct?.streamUrl) return cacheRumbleVideo(db, cacheKey, direct, timestamp);
+  }
   if (!limitedString(config.rumbleApiKey, 512))
     return result(503, { error: "Rumble video API key not configured" });
   if (!await takeRumbleLookup(db, timestamp, 30))
@@ -393,6 +419,10 @@ async function rumbleVideo(db, request, config, timestamp) {
   const video = normalizeRumbleVideo(data);
   if (!video || !video.streamUrl)
     return result(502, { error: "Rumble did not provide a playable media stream" });
+  return cacheRumbleVideo(db, cacheKey, video, timestamp);
+}
+
+async function cacheRumbleVideo(db, cacheKey, video, timestamp) {
   const payload = { video };
   const body = JSON.stringify(payload);
   await db.prepare(
