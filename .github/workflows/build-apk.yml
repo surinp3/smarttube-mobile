@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Build and stage a signed v17 update'
+        description: 'Build and stage a signed v18 update'
         required: false
         type: boolean
         default: false
@@ -117,11 +117,11 @@ jobs:
           apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v17-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v17-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v18-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v18-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v17-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v17-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v18-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v18-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -142,17 +142,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v17-ARM64-APK
+          name: SmartTube-Mobile-v18-ARM64-APK
           path: output
       - name: Stage release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v17 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v17 is already published; increment the mobile version for the next release."
+          if gh release view v18 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v18 is already published; increment the mobile version for the next release."
           else
-            gh release create v17 output/SmartTube-Mobile-v17-ARM64.apk \
+            gh release create v18 output/SmartTube-Mobile-v18-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "SmartTube Mobile v17 — YouTube and Rumble filters" \
-              --notes "Opens on YouTube Home. Use the YouTube and Rumble icons to switch sources. Home shows 19 videos at a time, with Show more for the next batch."
+              --title "SmartTube Mobile v18 — Latest Rumble news and follows" \
+              --notes "Rumble Home mixes follows with news and sorts by publish time. A creator limit keeps one channel from crowding the feed. Show more reveals the next batch of up to 19 videos."
           fi

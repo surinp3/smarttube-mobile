@@ -2,10 +2,11 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v17** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
+Version **v18** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
 
-- Rumble Home uses followed channels or shows live videos when you have no
-  follows. Rumble's Editor's Picks are a fallback when live discovery is unavailable.
+- Rumble Home mixes followed channels with recent news, newest first. A per-channel
+  limit leaves room for other publishers. Live videos or Editor's Picks can fill in
+  when no follows or news are available.
 - **Follow on Rumble** in the YouTube player controls lets you choose a matching
   channel to save to your synced SmartTube follows.
 - A Rumble player using HTTPS HLS or MP4 with alternate-stream recovery after
