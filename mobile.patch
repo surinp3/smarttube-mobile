@@ -71,8 +71,8 @@ index 091bb9b..51c0242 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2469
-+            versionNameSuffix "-mobile.16"
++            versionCode 2470
++            versionNameSuffix "-mobile.17"
 +            matchingFallbacks = ['ststable']
 +        }
      }

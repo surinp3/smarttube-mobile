@@ -153,6 +153,6 @@ jobs:
           else
             gh release create v17 output/SmartTube-Mobile-v17-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "SmartTube Mobile v17 — Follow on Rumble" \
+              --title "SmartTube Mobile v17 — YouTube and Rumble filters" \
               --notes "Opens on YouTube Home. Use the YouTube and Rumble icons to switch sources. Home shows 19 videos at a time, with Show more for the next batch."
           fi
