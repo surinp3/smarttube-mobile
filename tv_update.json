@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v13/SmartTube-Pat-TV-v13-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v13/SmartTube-Pat-TV-v13-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v13/SmartTube-Pat-TV-v13-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -87,6 +87,15 @@
       "Suggestions prioritize the watched subject, with channel as a tie-breaker",
       "News prefers Sweden/Swedish coverage with an English breaking-news fallback; Thai news is filtered",
       "Memory-aware temporary VOD read-ahead scales toward 500 MB only where heap capacity permits; live buffering stays short and consumed buffers are discarded"
+    ]
+  },
+  "32.69-tv.14": {
+    "versionCode": 3014,
+    "changelog": [
+      "Adds Related videos to the TV player controls, opening suggestions below the watched video with the remote",
+      "Keeps strong subject matches first and allows relevant title variation; channel only breaks equal subject scores",
+      "Shows a focusable retry card when related videos are loading or unavailable, and retains results arriving before player rows initialize",
+      "Preserves Sweden/Swedish or English breaking news, adaptive temporary buffering, SABR recovery, Rumble and sync"
     ]
   }
 }

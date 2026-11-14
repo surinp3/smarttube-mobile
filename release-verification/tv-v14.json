@@ -1,0 +1,105 @@
+{
+  "sourceCommit": "3fb35947a08b9de68771d02214958ec4cefb7346",
+  "localBuild": ":smarttubetv:assembleStpattvRelease BUILD SUCCESSFUL",
+  "localTests": {
+    "maintenanceFixtures": 14,
+    "tvPlayerRobolectric": 5,
+    "sabrAttestation": 6,
+    "bufferAndNews": 8,
+    "rumbleNews": 2
+  },
+  "ciRun": "https://github.com/surinp3/smarttube-mobile/actions/runs/43580514737",
+  "devicePlayback": "not verified",
+  "emulator": "No attached devices; Android Emulator hypervisor driver not installed",
+  "lintLimitation": "Java 11 cannot load the existing WorkManager lint registry compiled for Java 17; assemble succeeds. Full lint is not claimed.",
+  "release": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v14",
+  "ciConclusion": "success",
+  "apks": [
+    {
+      "tag": "tv-v14",
+      "name": "SmartTube-Pat-TV-v14-ARMv7.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3014,
+      "versionName": "32.69-tv.14",
+      "sha256": "300fc6f8e3c619fb61dfcb982333a65760921c947a95e7a2e729ee13ed95d6ae",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 45729827,
+      "nativeCode": "native-code: 'armeabi-v7a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v14",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v14/SmartTube-Pat-TV-v14-ARMv7.apk"
+    },
+    {
+      "tag": "tv-v14",
+      "name": "SmartTube-Pat-TV-v14-ARM64.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3014,
+      "versionName": "32.69-tv.14",
+      "sha256": "8473b5ab684e9eb6086c110d7bcfa2f326407139ba2595ec29e6506184f4b022",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 56307559,
+      "nativeCode": "native-code: 'arm64-v8a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v14",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v14/SmartTube-Pat-TV-v14-ARM64.apk"
+    },
+    {
+      "tag": "tv-v14",
+      "name": "SmartTube-Pat-TV-v14-Universal.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3014,
+      "versionName": "32.69-tv.14",
+      "sha256": "ee54f447a3c0bb2871710ed22eb38a4c3130b2228b43df44c13b2e8c4def2966",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 85617326,
+      "nativeCode": "native-code: 'arm64-v8a' 'armeabi-v7a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v14",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v14/SmartTube-Pat-TV-v14-Universal.apk"
+    }
+  ],
+  "publicDownloads": [
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v14/SmartTube-Pat-TV-v14-ARMv7.apk",
+      "status": 200,
+      "sha256": "300fc6f8e3c619fb61dfcb982333a65760921c947a95e7a2e729ee13ed95d6ae",
+      "size": 45729827
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-ARMv7.apk",
+      "status": 200,
+      "sha256": "300fc6f8e3c619fb61dfcb982333a65760921c947a95e7a2e729ee13ed95d6ae",
+      "size": 45729827
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v14/SmartTube-Pat-TV-v14-ARM64.apk",
+      "status": 200,
+      "sha256": "8473b5ab684e9eb6086c110d7bcfa2f326407139ba2595ec29e6506184f4b022",
+      "size": 56307559
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-ARM64.apk",
+      "status": 200,
+      "sha256": "8473b5ab684e9eb6086c110d7bcfa2f326407139ba2595ec29e6506184f4b022",
+      "size": 56307559
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v14/SmartTube-Pat-TV-v14-Universal.apk",
+      "status": 200,
+      "sha256": "ee54f447a3c0bb2871710ed22eb38a4c3130b2228b43df44c13b2e8c4def2966",
+      "size": 85617326
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-Universal.apk",
+      "status": 200,
+      "sha256": "ee54f447a3c0bb2871710ed22eb38a4c3130b2228b43df44c13b2e8c4def2966",
+      "size": 85617326
+    }
+  ],
+  "mobileLatestTag": "v20",
+  "updaterVersionCode": 3014,
+  "updaterBaselineBlob": "78ebf625e0d573625f108c63e874ea18832b27d5"
+}

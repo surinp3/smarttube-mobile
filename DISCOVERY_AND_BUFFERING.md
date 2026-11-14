@@ -114,5 +114,5 @@ the TV manifest uses code 3013 and the verified `tv-v13` mirror paths.
 
 Previous v19/tv-v12 assets are retained. Their complete app/Rumble/sync source
 replay and higher-version recovery preparation were checked: a future recovery
-would need unused v21/tv-v14 or higher and codes at least 2474/3014. No recovery
+would need unused v21/tv-v15 or higher and codes at least 2474/3015. No recovery
 was executed, no app was uninstalled, and no production database was migrated.
