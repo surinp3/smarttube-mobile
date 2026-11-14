@@ -4150,10 +4150,10 @@ index 0111d8ce9..28be6bcc2 100644
      private void setupVolumeBoost(SimpleExoPlayer player) {
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControl.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControl.java
 new file mode 100644
-index 000000000..7a6b6034e
+index 000000000..b69991e28
 --- /dev/null
 +++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControl.java
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,63 @@
 +package com.liskovsoft.smartyoutubetv2.common.exoplayer.other;
 +
 +import com.google.android.exoplayer2.C;
@@ -4185,13 +4185,14 @@ index 000000000..7a6b6034e
 +    @Override public void onPrepared() {
 +        liveOrUnknown = true;
 +        allocator.reset();
++        allocator.trim();
 +        delegate.onPrepared();
 +    }
 +    @Override public void onTracksSelected(Renderer[] renderers, TrackGroupArray groups, TrackSelectionArray tracks) {
 +        delegate.onTracksSelected(renderers, groups, tracks);
 +    }
-+    @Override public void onStopped() { delegate.onStopped(); }
-+    @Override public void onReleased() { delegate.onReleased(); }
++    @Override public void onStopped() { delegate.onStopped(); allocator.trim(); }
++    @Override public void onReleased() { delegate.onReleased(); allocator.trim(); }
 +    @Override public Allocator getAllocator() { return allocator; }
 +    @Override public long getBackBufferDurationUs() { return 0; }
 +    @Override public boolean retainBackBufferFromKeyframe() { return false; }
@@ -4210,7 +4211,10 @@ index 000000000..7a6b6034e
 +    @Override public void onPlayerStateChanged(boolean playWhenReady, int state) {
 +        // Consumed samples are discarded, and completion frees the unused pool.
 +        // stop/release also reset it through DefaultLoadControl. No files are written.
-+        if (state == Player.STATE_ENDED || state == Player.STATE_IDLE) allocator.reset();
++        if (state == Player.STATE_ENDED || state == Player.STATE_IDLE) {
++            allocator.reset();
++            allocator.trim();
++        }
 +    }
 +}
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/TemporaryBufferPolicy.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/TemporaryBufferPolicy.java
@@ -4401,10 +4405,10 @@ index 000000000..1c73944a2
 +}
 diff --git a/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControlTest.java b/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControlTest.java
 new file mode 100644
-index 000000000..24f7da267
+index 000000000..67ea69459
 --- /dev/null
 +++ b/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControlTest.java
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,96 @@
 +package com.liskovsoft.smartyoutubetv2.common.exoplayer.other;
 +
 +import static org.junit.Assert.*;
@@ -4486,6 +4490,19 @@ index 000000000..24f7da267
 +        assertTrue(control.shouldStartPlayback(7_000_000, 1, true));
 +        assertEquals(0, control.getBackBufferDurationUs());
 +        assertFalse(control.retainBackBufferFromKeyframe());
++    }
++
++    @Test public void repeatedReplayCompletionAlsoTrimsAnAlreadyResetPool() {
++        SessionLoadControl control = prepared();
++        DefaultAllocator allocator = (DefaultAllocator) control.getAllocator();
++        for (int replay = 0; replay < 3; replay++) {
++            Allocation old = allocator.allocate(); allocator.release(old);
++            control.onPlayerStateChanged(false, Player.STATE_ENDED);
++            Allocation fresh = allocator.allocate();
++            assertNotSame(old, fresh);
++            allocator.release(fresh);
++        }
++        control.onReleased();
 +    }
 +}
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java

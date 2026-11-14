@@ -79,9 +79,9 @@ the actual amount loaded ahead. The previous SABR recovery fixes remain intact.
   wrong-topic camera-model matches, water-filter subjects, Swedish accents,
   duplicate/current/unplayable videos, generic titles, stale callbacks,
   Swedish/English/Thai news, and memory-cap calculations.
-- Seven Android/Robolectric checks exercise actual live/VOD loading decisions,
+- Eight Android/Robolectric checks exercise actual live/VOD loading decisions,
   byte limits, startup/rebuffer behavior, allocator cleanup on four lifecycle
-  paths, and news JSON locale overrides starting from a Thai context.
+  paths and repeated replay, and news JSON locale overrides starting from a Thai context.
 - Two Android/Robolectric checks exercise actual Rumble JSON filtering and
   preservation of accepted playback metadata, including empty news.
 - The six SABR attestation tests and signed mobile/TV build gates remain in CI.
