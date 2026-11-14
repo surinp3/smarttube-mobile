@@ -2000,7 +2000,7 @@ index ee6b2ce4d..63c12b706 100644
      private static final int SECONDARY = Color.rgb(170, 170, 170);
      private static final int ACCENT = Color.rgb(255, 35, 35);
 -    private static final int MOBILE_VERSION = 13;
-+    private static final int MOBILE_VERSION = 21;
++    private static final int MOBILE_VERSION = 22;
 +    private static final int HOME_PAGE_SIZE = 19;
      private static final String MOBILE_PREFERENCES = "smarttube_mobile";
      private static final String HIDE_HOME_SHORTS = "hide_home_shorts";

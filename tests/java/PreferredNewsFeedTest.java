@@ -77,7 +77,20 @@ public class PreferredNewsFeedTest {
     @Test public void allUnavailableReturnsEmptyWithoutChangingGlobalLocale() {
         final int[] calls={0};
         assertTrue(PreferredNewsFeed.load((query,english)->{calls[0]++;return null;},NOW).isEmpty());
-        assertEquals(7,calls[0]);
+        assertEquals(9,calls[0]);
+    }
+    @Test public void currentSwedishBusinessPublishersAreIncludedBeforeEnglish() {
+        List<MediaGroup> rows=PreferredNewsFeed.load((query,english)-> {
+            if(query.startsWith("EFN"))return group(item("efn-live","Chefsekonomens prognos efter börsoron","EFN Ekonomikanalen • 3000 visningar • för 1 dag sedan",-1));
+            if(query.startsWith("Dagens industri"))return group(item("di-live","AI och ekonomin: dagens analys","Dagens industri • 12000 visningar • för 21 timmar sedan",-1));
+            if(english)return group(item("bbc-live","Flight activity after emergency shutdown","BBC News • 65000 views • 1 hour ago",-1));
+            return Collections.emptyList();
+        },NOW);
+        assertEquals(2,rows.size());
+        assertEquals("Swedish news",rows.get(0).getTitle());
+        assertEquals(2,rows.get(0).getMediaItems().size());
+        assertEquals("Breaking news in English",rows.get(1).getTitle());
+        assertEquals(1,rows.get(1).getMediaItems().size());
     }
     @Test public void recentSwedenHistoryAndSatireDoNotQualifyAsSwedishNews() {
         assertTrue(PreferredNewsFeed.load((query,english)->group(

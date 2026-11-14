@@ -1,4 +1,12 @@
-# Mobile v21 / TV v15: a fuller current news section
+# Mobile v22 / TV v16: fuller news with verified Swedish sources
+
+The Swedish follow-up adds **EFN Ekonomikanalen** and **Dagens industri**, which
+were absent from the source/publisher list. A new live app-client probe verified
+**4 Swedish videos** (2 from each publisher) and **24 English videos**, **28 in
+total**, with zero Thai accepted. The added Swedish material is business and
+economics news/interviews; this does not establish availability of a broad
+Swedish general-news feed. See [live counts and examples](release-verification/swedish-news-live-20261114.json).
+No claim of Swedish availability is based solely on fixture tests.
 
 The previous news loader stopped after any Swedish result, even one video,
 and disabled continuation. It could therefore leave the whole News section
@@ -21,13 +29,14 @@ Known publishers are required, so newly uploaded history, satire and archive
 clips do not qualify merely because their titles mention Sweden or news.
 Thai-script headlines/authors remain excluded.
 
-The bounded search plan uses at most seven requests and a refresh deadline;
+The bounded search plan uses at most nine requests with a separate 12-second
+request-start budget per language, so slow Swedish sources cannot suppress English;
 active news search calls are cancelled after six seconds. Source failures
 preserve successful results from other sources. Missing current videos are not
 padded with old or unrelated items. Consequently 48 is a target, not a promise.
 No global locale, playback settings, backend or SQLite data are changed.
 
-The live app-client probe on 2026-11-14 returned **24 accepted English news
+The initial v21 app-client probe on 2026-11-14 returned **24 accepted English news
 videos**: BBC News 8, Sky News 8, Reuters 5, ABC News 1, CBS News 1 and NBC News 1.
 The Swedish publisher searches yielded no qualifying fresh videos during this
 probe. Rejected Swedish matches included SVT Humor, history, archive uploads
@@ -35,22 +44,22 @@ and unrelated/Thai results. See [captured counts and examples](release-verificat
 This verifies a substantial current English selection, not Swedish availability
 or signed-in device behavior. News results change over time.
 
-Seven Android/Robolectric regressions cover the one-item primary case,
+Eight Android/Robolectric regressions cover the one-item primary case,
 multi-publisher filling to 48, duplicate removal, per-publisher limits, source
 failure, all-empty results, Thai/unrelated/stale rejection, real combined TV
-author/date metadata and the actual supported date-filter encoding. Existing
+author/date metadata, newly added Swedish business publishers and the actual supported date-filter encoding. Existing
 locale, buffer, SABR, TV player and Rumble checks remain in the build workflows.
 
 `news-mediaservice.patch` applies after the existing MediaService patch;
 `news.patch` adds the regression tests after `pat-sync.patch`. Recovery replays
 these overlays only when they exist in the selected known-good source.
-Mobile v21 uses code 2474; TV v15 uses 3015. The permanent signing key, previous
+Mobile v22 uses code 2475; TV v16 uses 3016. The permanent signing key, previous
 release assets and in-place higher-version recovery path are preserved.
 
 Actual phone/TV rendering, playback and remote operation are not verified.
 No device is connected; emulator acceleration is unavailable.
 
-## Published verification
+## Mobile v21 / TV v15 published verification
 
 Final APK source: `1de529762bf497991de79e43b8a7c6552917172d`.
 Both production workflows passed all gates and signed assembly:

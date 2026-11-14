@@ -54,18 +54,27 @@ diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/search/v2/Search
 diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
 --- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
 +++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
-@@ -24,6 +24,11 @@
-         }
-         return swedishPublisher(publisher) || headline.matches(
+@@ -26,6 +26,11 @@
                  ".*\\b(sverige|sweden|swedish|stockholm|goteborg|malmo|riksdagen|regeringen|nyheter|nyheten)\\b.*");
-+    }
-+
+     }
+ 
 +    public static boolean isPublisher(String author, boolean english) {
 +        String publisher = normalize(author);
 +        return english ? englishPublisher(publisher) : swedishPublisher(publisher);
++    }
++
+     public static boolean isNewsTopic(String topic) {
+         String text = normalize(topic);
+         return text.contains("news") || text.contains("nyheter") || text.contains("nytt");
+@@ -35,7 +40,7 @@
+         return value.equals("svt") || value.startsWith("svt nyheter") || value.startsWith("tv4") ||
+                 value.startsWith("nyhetsmorgon") || value.startsWith("sveriges radio") ||
+                 value.equals("ekot") || value.startsWith("aftonbladet") || value.startsWith("expressen") ||
+-                value.startsWith("dagens nyheter");
++                value.startsWith("dagens nyheter") || value.equals("efn ekonomikanalen") || value.equals("dagens industri");
      }
  
-     public static boolean isNewsTopic(String topic) {
+     private static boolean englishPublisher(String value) {
 diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsFeed.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsFeed.java
 new file mode 100644
 --- /dev/null
@@ -92,7 +101,7 @@ new file mode 100644
 +    public static final int ITEMS_PER_LANGUAGE = 24;
 +    public static final int ITEMS_PER_PUBLISHER = 8;
 +    public static final long MAX_AGE_MS = 48L * 60 * 60 * 1000;
-+    private static final String[] SWEDISH = {"SVT Nyheter", "TV4 Nyheterna", "Aftonbladet nyheter", "Expressen nyheter"};
++    private static final String[] SWEDISH = {"SVT Nyheter", "TV4 Nyheterna", "Aftonbladet nyheter", "Expressen nyheter", "EFN Ekonomikanalen", "Dagens industri"};
 +    private static final String[] ENGLISH = {"BBC News breaking", "Sky News breaking", "Reuters breaking news"};
 +
 +    public interface Source {
@@ -104,8 +113,8 @@ new file mode 100644
 +    public static List<MediaGroup> load(Source source, long now) {
 +        List<MediaGroup> result = new ArrayList<>();
 +        Set<String> seen = new HashSet<>();
-+        long deadline = System.nanoTime() + 25_000_000_000L;
 +        for (boolean english : new boolean[] {false, true}) {
++            long deadline = System.nanoTime() + 12_000_000_000L;
 +            List<MediaItem> accepted = new ArrayList<>();
 +            Map<String, Integer> publishers = new HashMap<>();
 +            for (String query : english ? ENGLISH : SWEDISH) {

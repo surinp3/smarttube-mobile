@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Build and stage a signed v21 update'
+        description: 'Build and stage a signed v22 update'
         required: false
         type: boolean
         default: false
@@ -140,11 +140,11 @@ jobs:
           apk_path="$(find "upstream/smarttubetv/build/outputs/apk/stmobile/$variant" -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v21-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v21-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v22-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v22-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v21-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v21-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v22-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v22-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -165,17 +165,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v21-ARM64-APK
+          name: SmartTube-Mobile-v22-ARM64-APK
           path: output
       - name: Stage release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v21 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v21 is already published; increment the mobile version for the next release."
+          if gh release view v22 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v22 is already published; increment the mobile version for the next release."
           else
-            gh release create v21 output/SmartTube-Mobile-v21-ARM64.apk \
+            gh release create v22 output/SmartTube-Mobile-v22-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Mobile v21 - Fresh Swedish and English news' \
-              --notes 'Fixes the news section stopping at one Swedish video. Collects fresh news from multiple Swedish and English breaking-news publishers, filters old clips, satire and Thai results, deduplicates videos and limits each publisher. Targets up to 24 videos per language as current sources permit. Preserves playback recovery, related-video controls, temporary buffering, Rumble, sync and rollback. Live feed probes and automated tests are recorded in NEWS_FEED_FIX.md; actual device playback remains unverified.'
+              --title 'SmartTube Mobile v22 - Verified Swedish and English news' \
+              --notes 'Adds live-verified Swedish business-news publishers EFN Ekonomikanalen and Dagens industri, preserving the fuller English breaking-news selection. Collects fresh news from multiple Swedish and English breaking-news publishers, filters old clips, satire and Thai results, deduplicates videos and limits each publisher. Targets up to 24 videos per language as current sources permit. Preserves playback recovery, related-video controls, temporary buffering, Rumble, sync and rollback. Live feed probes and automated tests are recorded in NEWS_FEED_FIX.md; actual device playback remains unverified.'
           fi

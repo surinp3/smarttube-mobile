@@ -180,15 +180,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v15-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v15-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v15-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v15-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v16-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v16-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v16-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v16-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v15-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v15-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v15-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v15-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v16-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v16-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v16-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v16-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -209,21 +209,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v15-SIGNED-APKs
+          name: SmartTube-Pat-TV-v16-SIGNED-APKs
           path: output
       - name: Stage TV release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v15 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v15 is already published; increment the TV version for the next release.'
+          if gh release view tv-v16 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v16 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v15 \
-              output/SmartTube-Pat-TV-v15-ARMv7.apk \
-              output/SmartTube-Pat-TV-v15-ARM64.apk \
-              output/SmartTube-Pat-TV-v15-Universal.apk \
+            gh release create tv-v16 \
+              output/SmartTube-Pat-TV-v16-ARMv7.apk \
+              output/SmartTube-Pat-TV-v16-ARM64.apk \
+              output/SmartTube-Pat-TV-v16-Universal.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v15 - Fresh Swedish and English news' \
-              --notes 'Fixes the news section stopping at one Swedish video. Collects fresh news from multiple Swedish and English breaking-news publishers, filters old clips, satire and Thai results, deduplicates videos and limits each publisher. Targets up to 24 videos per language as current sources permit. Preserves playback recovery, related-video controls, temporary buffering, Rumble, sync and rollback. Live feed probes and automated tests are recorded in NEWS_FEED_FIX.md; actual device playback remains unverified.' \
+              --title 'SmartTube Pat TV v16 - Verified Swedish and English news' \
+              --notes 'Adds live-verified Swedish business-news publishers EFN Ekonomikanalen and Dagens industri, preserving the fuller English breaking-news selection. Collects fresh news from multiple Swedish and English breaking-news publishers, filters old clips, satire and Thai results, deduplicates videos and limits each publisher. Targets up to 24 videos per language as current sources permit. Preserves playback recovery, related-video controls, temporary buffering, Rumble, sync and rollback. Live feed probes and automated tests are recorded in NEWS_FEED_FIX.md; actual device playback remains unverified.' \
               --latest=false
           fi

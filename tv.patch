@@ -71,15 +71,15 @@ index 51c0242..caa704c 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -185,6 +185,14 @@ android {
-             versionNameSuffix "-mobile.21"
+             versionNameSuffix "-mobile.22"
              matchingFallbacks = ['ststable']
          }
 +        stpattv {
 +            applicationId "app.smarttube.pattv"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 3015
-+            versionNameSuffix "-tv.15"
++            versionCode 3016
++            versionNameSuffix "-tv.16"
 +            matchingFallbacks = ['ststable']
 +        }
      }
