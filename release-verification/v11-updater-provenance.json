@@ -1,0 +1,10 @@
+{
+  "tvV11SourceCommit": "930f9fe3759fa05eefe6bf8ab2bc80060c25e10f",
+  "smartTubePin": "c8873b539d8463b3276d54e395f94e5cd2bd3198",
+  "sharedModulesPin": "5b6b5d1d3ba670e3f89edef1d1394a7562251f2c",
+  "parserOriginalPath": "appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/core/AppVersionChecker.java",
+  "parserNormalizedSha256": "cb98beeffca65abacd82c69a5390b8035dbf10134e69816100b6cf0548e7393c",
+  "fixtureChanges": "Package and class renamed; explicit listener import added. Parser behavior unchanged.",
+  "installedVersionCode": 3011,
+  "productionCertificateSha256": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba"
+}

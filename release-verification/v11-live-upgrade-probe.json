@@ -1,0 +1,19 @@
+{
+  "nullPathError": "Error while download. Install path is null",
+  "attempts": [
+    {
+      "url": "https:\/\/jobhub.asia\/downloads\/smarttube-tv\/tv-v16\/SmartTube-Pat-TV-v16-ARMv7.apk",
+      "pathReturned": true,
+      "elapsedMs": 6913,
+      "size": 45729827,
+      "sha256": "b8938cd78cb1b5af58ac85310ef9f190bc5262f6dd41c3b7fe821fa3e79304a9"
+    },
+    {
+      "url": "https:\/\/github.com\/surinp3\/smarttube-mobile\/releases\/download\/tv-v16\/SmartTube-Pat-TV-v16-ARMv7.apk",
+      "pathReturned": true,
+      "elapsedMs": 4978,
+      "size": 45729827,
+      "sha256": "b8938cd78cb1b5af58ac85310ef9f190bc5262f6dd41c3b7fe821fa3e79304a9"
+    }
+  ]
+}

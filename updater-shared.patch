@@ -1,0 +1,183 @@
+diff --git a/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/other/downloadmanager/DownloadManager.java b/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/other/downloadmanager/DownloadManager.java
+--- a/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/other/downloadmanager/DownloadManager.java
++++ b/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/other/downloadmanager/DownloadManager.java
+@@ -4,6 +4,7 @@
+ import android.net.ConnectivityManager;
+ import android.net.NetworkInfo;
+ import android.net.Uri;
++import android.os.SystemClock;
+ import com.liskovsoft.sharedutils.helpers.FileHelpers;
+ import com.liskovsoft.sharedutils.helpers.MessageHelpers;
+ import com.liskovsoft.sharedutils.mylogger.Log;
+@@ -57,8 +58,9 @@
+     private long mRequestId;
+     private InputStream mResponseStream;
+     private int mTotalLen = 0;
++    private long mExpectedLength = -1;
+     private Uri mFileUri;
+-    private static final long MAX_DOWN_TIME_MS = 60 * 1_000; // 1 minute
++    private static final long MAX_DOWN_TIME_MS = 15 * 60 * 1_000L; // APK transfers can exceed one minute on TVs.
+     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36";
+     private static final String ACCEPT_CONTENT = "*/*";
+     private final Map<String, String> mHeaders = new HashMap<>();
+@@ -82,8 +84,14 @@
+         Response response = OkHttpManager.instance().doRequest(url, mClient, mHeaders);
+ 
+         if (response == null || response.body() == null) {
+-            throw new IllegalStateException("Error: bad response");
+-        }
++            throw new IllegalStateException("Update server returned no download body");
++        }
++        if (!response.isSuccessful()) {
++            int status = response.code();
++            response.close();
++            throw new IllegalStateException("Update download returned HTTP " + status);
++        }
++        mExpectedLength = response.body().contentLength();
+ 
+         mResponseStream = new BufferedInputStream(response.body().byteStream());
+ 
+@@ -171,24 +179,25 @@
+         FileOutputStream fos = null;
+ 
+         try {
+-            long downStartTimeMs = System.currentTimeMillis();
++            long downStartTimeMs = SystemClock.elapsedRealtime();
+ 
+             fos = new FileOutputStream(destination.getPath());
+ 
+-            byte[] buffer = new byte[1024];
++            byte[] buffer = new byte[64 * 1024];
+             int len1;
+             int totalLen = 0;
+             while ((len1 = is.read(buffer)) != -1) {
+                 totalLen += len1;
+                 fos.write(buffer, 0, len1);
+ 
+-                if (System.currentTimeMillis() - downStartTimeMs > MAX_DOWN_TIME_MS) {
+-                    // Oops. Downloading is taken too much time. Cancelling...
+-                    totalLen = 0;
+-                    break;
++                if (SystemClock.elapsedRealtime() - downStartTimeMs > MAX_DOWN_TIME_MS) {
++                    throw new IllegalStateException("Update download exceeded 15 minutes; retry or install the signed APK manually");
+                 }
+             }
+ 
++            if (mExpectedLength >= 0 && totalLen != mExpectedLength) {
++                throw new IllegalStateException("Incomplete update download: expected " + mExpectedLength + " bytes, received " + totalLen);
++            }
+             mTotalLen = totalLen;
+         } catch (IOException ex) {
+             throw new IllegalStateException(ex);
+diff --git a/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/core/AppDownloader.java b/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/core/AppDownloader.java
+--- a/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/core/AppDownloader.java
++++ b/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/core/AppDownloader.java
+@@ -26,6 +26,7 @@
+     private final AppDownloaderListener mListener;
+     private final int mMinApkSizeBytes;
+     private AppDownloadTask mDownloadTask;
++    private Exception mLastDownloadError;
+ 
+     public AppDownloader(Context context, AppDownloaderListener listener, int minApkSizeBytes) {
+         mContext = context;
+@@ -56,9 +57,10 @@
+ 
+             Uri[] uris = args[0];
+ 
++            mLastDownloadError = null;
+             String path = null;
+             for (Uri uri : uris) {
+-                if (URLUtil.isValidUrl(uri.toString())) {
++                if (uri != null && URLUtil.isValidUrl(uri.toString())) {
+                     path = downloadPackage(uri.toString());
+                     if (path != null)
+                         break;
+@@ -70,24 +72,25 @@
+ 
+         @Override
+         protected void onPostExecute(String path) {
++            mInProgress = false;
++            mDownloadTask = null;
+             if (path != null) {
+                 mListener.onApkDownloaded(path);
+             } else {
+-                String msg = "Error while download. Install path is null";
++                String msg = "Update download failed. Retry or install the signed APK manually without uninstalling.";
+                 Log.e(TAG, msg);
+-                mListener.onDownloadError(new IllegalStateException(msg));
++                mListener.onDownloadError(new IllegalStateException(msg, mLastDownloadError));
+             }
+-
+-            mInProgress = false;
+-            mDownloadTask = null;
+         }
+ 
+         private String downloadPackage(String uri) {
+             File cacheDir = FileHelpers.getCacheDir(mContext);
+-            if (cacheDir == null) {
++            if (cacheDir == null || (!cacheDir.exists() && !cacheDir.mkdirs()) || !cacheDir.canWrite()) {
++                mLastDownloadError = new IllegalStateException("Update cache is unavailable or not writable; check free storage");
+                 return null;
+             }
+-            File outputFile = new File(cacheDir, CURRENT_APK);
++            File outputFile = new File(cacheDir, "update-download.apk");
++            File completeFile = new File(cacheDir, CURRENT_APK);
+             String path = null;
+             try {
+                 DownloadManager manager = new DownloadManager(mContext);
+@@ -101,16 +104,27 @@
+                     if (destination != null) {
+                         // It could be a web page instead of apk
+                         if (size > mMinApkSizeBytes) {
+-                            path = destination.getPath();
++                            if (completeFile.exists() && !completeFile.delete()) {
++                                throw new IllegalStateException("Cannot replace the cached update APK");
++                            }
++                            if (!outputFile.renameTo(completeFile)) {
++                                throw new IllegalStateException("Cannot finish saving the update APK; check free storage");
++                            }
++                            path = completeFile.getAbsolutePath();
+                         } else { // do cleanup
++                            mLastDownloadError = new IllegalStateException("Downloaded update is too small or incomplete");
+                             FileHelpers.delete(destination.getPath());
+                         }
+                     }
+-                } catch (IllegalStateException ex) { // 403 or something else
++                } catch (RuntimeException ex) { // Keep the cause instead of reporting a null path.
++                    mLastDownloadError = ex;
+                     Log.d(TAG, ex.toString());
+                 }
+-            } catch (IllegalStateException ex) { // CANNOT OBTAIN WRITE PERMISSIONS
++            } catch (RuntimeException ex) {
++                mLastDownloadError = ex;
+                 Log.e(TAG, ex.getMessage(), ex);
++            } finally {
++                if (path == null) FileHelpers.delete(outputFile.getAbsolutePath());
+             }
+             return path;
+         }
+diff --git a/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/AppUpdateChecker.java b/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/AppUpdateChecker.java
+--- a/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/AppUpdateChecker.java
++++ b/appupdatechecker2/src/main/java/com/liskovsoft/appupdatechecker2/AppUpdateChecker.java
+@@ -134,6 +134,7 @@
+     @Override
+     public void onApkDownloaded(String path) {
+         if (!checkApk(path)) {
++            mListener.onUpdateError(new IllegalStateException("Downloaded update is invalid or belongs to another app; retry the download"));
+             return;
+         }
+ 
+@@ -174,7 +175,12 @@
+     }
+ 
+     public void installUpdate() {
+-        Helpers.installPackage(mContext, mSettingsManager.getApkPath());
++        String path = mSettingsManager.getApkPath();
++        if (!checkApk(path)) {
++            mListener.onUpdateError(new IllegalStateException("The cached update APK is missing or expired; check for updates again"));
++            return;
++        }
++        Helpers.installPackage(mContext, path);
+     }
+ 
+     public boolean isUpdateCheckEnabled() {

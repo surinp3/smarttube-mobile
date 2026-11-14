@@ -7,3 +7,5 @@ tv-mediaservice.patch -text
 tv-player.patch -text
 news.patch -text
 news-mediaservice.patch -text
+updater.patch -text
+updater-shared.patch -text
