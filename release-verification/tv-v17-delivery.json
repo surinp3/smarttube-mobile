@@ -1,0 +1,95 @@
+{
+  "sourceCommit": "de28a008f75510e83f2c8f06fb9862b5560eac90",
+  "ci": "https://github.com/surinp3/smarttube-mobile/actions/runs/43614579709",
+  "ciConclusion": "success",
+  "apks": [
+    {
+      "tag": "tv-v17",
+      "name": "SmartTube-Pat-TV-v17-ARMv7.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3017,
+      "versionName": "32.69-tv.17",
+      "sha256": "41db73bb649ca855c70c053cde3f24ae27b6baff76d0cff4b2f6af3e5d893c85",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 45733931,
+      "nativeCode": "native-code: 'armeabi-v7a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v17",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk"
+    },
+    {
+      "tag": "tv-v17",
+      "name": "SmartTube-Pat-TV-v17-ARM64.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3017,
+      "versionName": "32.69-tv.17",
+      "sha256": "48ace9c7b839f3fffd0c8d8bde42292337ec6c5be6824df4ba057003a77b81a5",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 56311662,
+      "nativeCode": "native-code: 'arm64-v8a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v17",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk"
+    },
+    {
+      "tag": "tv-v17",
+      "name": "SmartTube-Pat-TV-v17-Universal.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3017,
+      "versionName": "32.69-tv.17",
+      "sha256": "e525d0cacae83a237df855b50cab47749c7b5edb686739310227ee5798b83c88",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 85621436,
+      "nativeCode": "native-code: 'arm64-v8a' 'armeabi-v7a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v17",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-Universal.apk"
+    }
+  ],
+  "publicDownloads": [
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk",
+      "status": 200,
+      "sha256": "41db73bb649ca855c70c053cde3f24ae27b6baff76d0cff4b2f6af3e5d893c85",
+      "size": 45733931
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk",
+      "status": 200,
+      "sha256": "41db73bb649ca855c70c053cde3f24ae27b6baff76d0cff4b2f6af3e5d893c85",
+      "size": 45733931
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk",
+      "status": 200,
+      "sha256": "48ace9c7b839f3fffd0c8d8bde42292337ec6c5be6824df4ba057003a77b81a5",
+      "size": 56311662
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk",
+      "status": 200,
+      "sha256": "48ace9c7b839f3fffd0c8d8bde42292337ec6c5be6824df4ba057003a77b81a5",
+      "size": 56311662
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-Universal.apk",
+      "status": 200,
+      "sha256": "e525d0cacae83a237df855b50cab47749c7b5edb686739310227ee5798b83c88",
+      "size": 85621436
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-Universal.apk",
+      "status": 200,
+      "sha256": "e525d0cacae83a237df855b50cab47749c7b5edb686739310227ee5798b83c88",
+      "size": 85621436
+    }
+  ],
+  "mobileLatestTag": "v22",
+  "tvUpdaterVersionCode": 3017,
+  "tvUpdaterBaselineBlob": "6c59bdbd76d71768f9016bf094e55290cf963ee2",
+  "legacyV11LiveV16Probe": "v11-live-upgrade-probe.json",
+  "osInstallation": "not performed"
+}

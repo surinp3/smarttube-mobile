@@ -1,11 +1,17 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk",
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk",
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk"
+    ],
+    "downloadUrlList": [
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-Universal.apk",
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-Universal.apk"
     ]
   },
   "32.69-tv.3": {
@@ -115,6 +121,16 @@
       "A real app-client probe returned four Swedish videos plus 24 English breaking-news videos; current availability varies",
       "Keeps Swedish and English source budgets separate so slow Swedish requests cannot suppress English results",
       "Preserves Thai and stale-content exclusion, duplicate removal, per-publisher limits, playback recovery, player suggestions, buffering, Rumble and sync"
+    ]
+  },
+  "32.69-tv.17": {
+    "versionCode": 3017,
+    "changelog": [
+      "Adds alternate GitHub download URLs compatible with the v11 updater, alongside the existing TV mirror",
+      "Replaces the one-minute transfer cutoff with a longer bounded download and checks for incomplete responses",
+      "Keeps completed cached APKs until a new download finishes and reports the real error instead of a null install path",
+      "Rejects missing or invalid cached APKs before opening the Android installer",
+      "Preserves existing settings, signing identity, news, player suggestions, playback recovery, buffering, Rumble and sync; install as an update without uninstalling"
     ]
   }
 }

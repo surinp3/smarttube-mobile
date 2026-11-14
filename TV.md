@@ -8,7 +8,7 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - Adaptive temporary VOD read-ahead up to ten minutes or a memory-safe target up to 500 MB, with 3-second start and 7-second rebuffer targets. Live/unknown streams stop at 30 seconds; low-buffer mode keeps five seconds. No offline/full-video download is promised.
 - After 12 seconds of cumulative buffering within a minute, TV VOD playback tries another client rather than blindly reloading the same one. SABR reload-token fixes from the pinned upstream revision remain in place.
 - Never silently changes a user's DNS preference to Google DNS during stall recovery.
-- Separate signed `tv-v16` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- Separate signed `tv-v17` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
 - **Related videos** in the player controls opens subject-first suggestions below
   the playing video; a focusable retry card appears when results are unavailable.
   See the [TV v14 player fix and tests](TV_PLAYER_SUGGESTIONS.md).
@@ -27,6 +27,8 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - **Settings → Rumble + Bunny sync** opens the shared browser and pairing controls.
   Enter the TV's 10-digit code in the mobile app to connect it to the hosted
   sync service.
+- [TV v11 update recovery](V11_UPGRADE_RECOVERY.md) documents alternate download hosts,
+  the tested legacy-client path and safe manual in-place installation.
 - In-app update checker reads `tv_update.json` on main, rather than the upstream SmartTube update manifest. Update this JSON and release URL with every future TV release.
 - No claims of zero buffering: actual performance depends on CDN, ISP, YouTube API changes and the attached device. Test on the Google TV Streamer before judging reliability.
 
