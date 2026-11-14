@@ -2,7 +2,7 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v18** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
+Version **v19** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
 
 - Rumble Home mixes followed channels with recent news, newest first. A per-channel
   limit leaves room for other publishers. Live videos or Editor's Picks can fill in
@@ -111,6 +111,10 @@ updater uses the latest published release, not Actions artifacts.
 Android requires the user to approve installing updates from this source once.
 
 ### Upstream changes and recovery
+
+The v19/tv-v12 SABR attestation and client-recovery backport is described
+in [Playback fix and validation](PLAYBACK_FIX.md). Device playback confirmation
+is still required before release.
 
 Every build checks the official SmartTube and MediaServiceCore sources for
 YouTube fetching and playback changes. A scheduled watcher also runs twice a

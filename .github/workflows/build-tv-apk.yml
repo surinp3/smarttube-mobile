@@ -6,6 +6,8 @@ on:
       - 'tv.patch'
       - 'pat-sync.patch'
       - 'mobile.patch'
+      - 'mediaservice.patch'
+      - 'tests/test_playback_regressions.py'
       - 'tv-mediaservice.patch'
       - 'tv_update.json'
       - 'upstream-pins.json'
@@ -16,6 +18,8 @@ on:
       - 'tv.patch'
       - 'pat-sync.patch'
       - 'mobile.patch'
+      - 'mediaservice.patch'
+      - 'tests/test_playback_regressions.py'
       - 'tv-mediaservice.patch'
       - 'tv_update.json'
       - 'upstream-pins.json'
@@ -115,6 +119,15 @@ jobs:
           sed -i "s|^distributionUrl=.*|distributionUrl=file://$gradle_zip|" "$wrapper"
           printf '\ndistributionSha256Sum=%s\n' "$gradle_sha" >> "$wrapper"
 
+      - name: Verify playback recovery control flow
+        env:
+          SMARTTUBE_SOURCE_DIR: upstream
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Verify SABR attestation recovery
+        working-directory: upstream
+        run: ./gradlew :exoplayer-library-sabr:testStstableDebugUnitTest --tests '*SabrProtectionStatusTest' --stacktrace
+
       - name: Build all Google TV ARM architectures
         working-directory: upstream
         run: |
@@ -136,15 +149,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v11-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v11-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v11-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v11-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v12-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v12-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v12-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v12-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v11-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v11-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v11-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v11-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v12-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v12-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v12-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v12-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -165,21 +178,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v11-SIGNED-APKs
+          name: SmartTube-Pat-TV-v12-SIGNED-APKs
           path: output
       - name: Stage TV release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v11 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v11 is already published; increment the TV version for the next release.'
+          if gh release view tv-v12 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v12 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v11 \
-              output/SmartTube-Pat-TV-v11-ARMv7.apk \
-              output/SmartTube-Pat-TV-v11-ARM64.apk \
-              output/SmartTube-Pat-TV-v11-Universal.apk \
+            gh release create tv-v12 \
+              output/SmartTube-Pat-TV-v12-ARMv7.apk \
+              output/SmartTube-Pat-TV-v12-ARM64.apk \
+              output/SmartTube-Pat-TV-v12-Universal.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v11 — Recent videos at startup' \
-              --notes 'Starts on the first video in Recent from your channels when available. Home shows 19 recent videos initially, and Show more reveals up to 19 more at a time. Includes ARMv7, ARM64 and Universal APKs.' \
+              --title 'SmartTube Pat TV v12 — SABR playback recovery' \
+              --notes 'Fixes premature SABR attestation errors, refreshes playback nonces for fallback clients, and bounds repeated stream recovery. Preserves Rumble, sync, TV buffers and DNS preferences. Includes ARMv7, ARM64 and Universal APKs. Real device playback still needs confirmation.' \
               --latest=false
           fi

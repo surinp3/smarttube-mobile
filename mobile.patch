@@ -71,8 +71,8 @@ index 091bb9b..51c0242 100644
 +            applicationId "app.smarttube.mobile"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 2471
-+            versionNameSuffix "-mobile.18"
++            versionCode 2472
++            versionNameSuffix "-mobile.19"
 +            matchingFallbacks = ['ststable']
 +        }
      }
@@ -1850,3 +1850,137 @@ index 0000000..0dba77b
 +<resources>
 +    <string name="app_name">SmartTube Mobile v7</string>
 +</resources>
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
+index 4369d0dd8..bfc84c140 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
+@@ -24,7 +24,7 @@ import java.util.List;
+ public class ErrorFixerController extends BasePlayerController implements OnLongBuffering {
+     private static final String TAG = ErrorFixerController.class.getSimpleName();
+     private static final long STREAM_END_THRESHOLD_MS = 180_000;
+-    private static final int MAX_SABR_ERROR_FIX_ATTEMPTS = 3;
++    private static final int MAX_SABR_ERROR_FIX_ATTEMPTS = 1;
+     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
+     private VideoLoaderController mVideoLoaderController;
+     private String mSabrErrorFixVideoId;
+diff --git a/exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java b/exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
+index c7ef9d0d4..7b730eec5 100644
+--- a/exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
++++ b/exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
+@@ -62,6 +62,7 @@ public class SabrProcessor {
+     private final int liveSegmentTargetDurationSec;
+     private long playerTimeMs;
+     private final String poToken;
++    private int poTokenFailCount;
+     private final boolean postLive;
+     private final String videoId;
+     private final long durationMs;
+@@ -451,7 +452,14 @@ public class SabrProcessor {
+         }
+ 
+         if (status != Status.OK) {
+-            throw new SabrPoTokenError("PoToken attestation failed: " + Helpers.toString(resultStatus));
++            poTokenFailCount++;
++            // Attestation can fail once before succeeding. Keep recovery bounded
++            // so a persistently rejected token reaches the player's client fallback.
++            if (poTokenFailCount > 1) {
++                throw new SabrPoTokenError("PoToken attestation failed with resultStatus=" + resultStatus);
++            }
++        } else {
++            poTokenFailCount = 0;
+         }
+ 
+         return result;
+diff --git a/exoplayer-amzn-2.10.6/library/sabr/src/test/java/com/google/android/exoplayer2/source/sabr/parser/SabrProtectionStatusTest.java b/exoplayer-amzn-2.10.6/library/sabr/src/test/java/com/google/android/exoplayer2/source/sabr/parser/SabrProtectionStatusTest.java
+new file mode 100644
+index 000000000..a4b9a8ac6
+--- /dev/null
++++ b/exoplayer-amzn-2.10.6/library/sabr/src/test/java/com/google/android/exoplayer2/source/sabr/parser/SabrProtectionStatusTest.java
+@@ -0,0 +1,87 @@
++package com.google.android.exoplayer2.source.sabr.parser;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.fail;
++
++import androidx.test.ext.junit.runners.AndroidJUnit4;
++
++import com.google.android.exoplayer2.source.sabr.parser.exceptions.SabrPoTokenError;
++import com.google.android.exoplayer2.source.sabr.parser.parts.PoTokenStatusSabrPart.PoTokenStatus;
++import com.google.android.exoplayer2.source.sabr.protos.videostreaming.StreamProtectionStatus;
++import com.google.android.exoplayer2.source.sabr.protos.videostreaming.StreamProtectionStatus.Status;
++import com.google.android.exoplayer2.source.sabr.protos.videostreaming.StreamerContext.ClientInfo;
++
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.annotation.Config;
++
++@RunWith(AndroidJUnit4.class)
++@Config(sdk = 28)
++public class SabrProtectionStatusTest {
++    @Test
++    public void pendingThenOkContinuesWithToken() {
++        SabrProcessor processor = createProcessor("token", 0);
++        assertStatus(processor, Status.ATTESTATION_PENDING, PoTokenStatus.PENDING);
++        assertStatus(processor, Status.OK, PoTokenStatus.OK);
++    }
++
++    @Test
++    public void pendingThenOkContinuesWithoutToken() {
++        SabrProcessor processor = createProcessor(null, 0);
++        assertStatus(processor, Status.ATTESTATION_PENDING, PoTokenStatus.PENDING_MISSING);
++        assertStatus(processor, Status.OK, PoTokenStatus.NOT_REQUIRED);
++    }
++
++    @Test
++    public void repeatedFailurePropagatesForClientRecovery() {
++        SabrProcessor processor = createProcessor("token", 0);
++        assertStatus(processor, Status.ATTESTATION_REQUIRED, PoTokenStatus.INVALID);
++        assertRejected(processor, Status.ATTESTATION_REQUIRED);
++    }
++
++    @Test
++    public void resumedPlaybackHasSameBoundedRecovery() {
++        SabrProcessor processor = createProcessor(null, 90_000);
++        assertStatus(processor, Status.ATTESTATION_REQUIRED, PoTokenStatus.MISSING);
++        assertRejected(processor, Status.ATTESTATION_PENDING);
++    }
++
++    @Test
++    public void successfulAttestationResetsConsecutiveFailureCount() {
++        SabrProcessor processor = createProcessor("token", 0);
++        assertStatus(processor, Status.ATTESTATION_PENDING, PoTokenStatus.PENDING);
++        assertStatus(processor, Status.OK, PoTokenStatus.OK);
++        assertStatus(processor, Status.ATTESTATION_PENDING, PoTokenStatus.PENDING);
++        assertRejected(processor, Status.ATTESTATION_PENDING);
++    }
++
++    @Test
++    public void failureCountBelongsToEachStream() {
++        SabrProcessor first = createProcessor("token", 0);
++        assertStatus(first, Status.ATTESTATION_PENDING, PoTokenStatus.PENDING);
++        assertRejected(first, Status.ATTESTATION_PENDING);
++        assertStatus(createProcessor("token", 0), Status.ATTESTATION_PENDING, PoTokenStatus.PENDING);
++    }
++
++    private static SabrProcessor createProcessor(String token, long positionMs) {
++        return new SabrProcessor("", ClientInfo.getDefaultInstance(), 5, 100,
++                positionMs, token, false, "test-video", 180_000);
++    }
++
++    private static StreamProtectionStatus protection(Status status) {
++        return StreamProtectionStatus.newBuilder().setStatus(status).build();
++    }
++
++    private static void assertStatus(SabrProcessor processor, Status status, PoTokenStatus expected) {
++        assertEquals(expected, processor.processStreamProtectionStatus(protection(status)).sabrPart.status);
++    }
++
++    private static void assertRejected(SabrProcessor processor, Status status) {
++        try {
++            processor.processStreamProtectionStatus(protection(status));
++            fail("Repeated attestation failure must reach client recovery");
++        } catch (SabrPoTokenError expected) {
++            // Expected: do not leave the player buffering forever on a rejected token.
++        }
++    }
++}

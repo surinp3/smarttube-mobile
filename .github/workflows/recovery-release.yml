@@ -105,6 +105,10 @@ jobs:
           else
             current_patch=mobile.patch
           fi
+          if [ -f known-good/pat-sync.patch ]; then
+            git -C upstream apply --check ../known-good/pat-sync.patch
+            git -C upstream apply ../known-good/pat-sync.patch
+          fi
           python3 scripts/prepare_recovery.py \
             --app "$RECOVERY_APP" \
             --known-good-tag "$KNOWN_GOOD_TAG" \

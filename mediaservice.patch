@@ -121,3 +121,26 @@ index acb3646..387f8d9 100644
              for (AccountInt accountInt : accountsInt) {
                  YouTubeAccount account = YouTubeAccount.from(accountInt);
                  account.setRefreshToken(refreshToken);
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java
+index 29e7de1e..a0a38266 100644
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/V2/VideoInfoService.java
+@@ -72,8 +72,6 @@ public class VideoInfoService extends VideoInfoServiceBase {
+             return null;
+         }
+ 
+-        AppService.instance().resetClientPlaybackNonce(); // history fix: unique value per each video info
+-
+         mUseAuth = true;
+ 
+         VideoInfo result = firstPlayable(videoId, clickTrackingParams);
+@@ -120,6 +118,9 @@ public class VideoInfoService extends VideoInfoServiceBase {
+         AppClient nextClient = beginClient;
+ 
+         do {
++            // Each client attempt needs its own nonce for history and PoToken
++            // attestation, including fallbacks within the same video load.
++            AppService.instance().resetClientPlaybackNonce();
+             VideoInfo result = getVideoInfoWithRentFix(nextClient, videoId, clickTrackingParams);
+ 
+             if (result != null && infoTester.test(result)) {
