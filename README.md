@@ -2,7 +2,7 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v21** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
+Version **v22** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
 
 - Player suggestions prioritize the watched subject, with channel as a tie-breaker.
 - News fills from fresh Swedish/Sweden and English breaking-news publisher searches,

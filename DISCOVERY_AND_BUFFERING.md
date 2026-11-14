@@ -27,7 +27,7 @@ videos. Real recommendation quality still needs confirmation on the devices.
 
 ## News preference
 
-Mobile v21 / TV v15 fill dedicated YouTube News from explicit Swedish/Sweden
+Mobile v22 / TV v16 fill dedicated YouTube News from explicit Swedish/Sweden
 and English/UK publisher searches, up to 24 videos per language with eight per
 publisher. One Swedish result no longer suppresses English news. A supported
 Today search parameter and parsed TV age metadata prevent old broadcasts from
@@ -112,5 +112,5 @@ the TV manifest uses code 3013 and the verified `tv-v13` mirror paths.
 
 Previous v19/tv-v12 assets are retained. Their complete app/Rumble/sync source
 replay and higher-version recovery preparation were checked: a future recovery
-would need unused v22/tv-v16 or higher and codes at least 2475/3016. No recovery
+would need unused v23/tv-v17 or higher and codes at least 2476/3017. No recovery
 was executed, no app was uninstalled, and no production database was migrated.

@@ -80,7 +80,33 @@ is v21; the TV updater uses code 3015 and verified tv-v15 mirror paths.
 See [artifact and public-download evidence](release-verification/news-v21-tv-v15.json).
 
 Previous v20/tv-v14 assets and TV manifest history remain. Future in-place
-recovery needs unused v22/tv-v16 or higher and codes at least 2475/3016.
+recovery needs unused v23/tv-v17 or higher and codes at least 2476/3017.
 The sync health check passed; backend code and SQLite were not changed.
 Existing Java 11/WorkManager lint-registry compatibility warnings remain;
 full lint coverage is not claimed. Real device behavior remains unverified.
+
+
+## Mobile v22 / TV v16 published verification
+
+Final APK source: `a852e889b46c366d3c43a1d58883ab8bd2f06f54`.
+[Mobile CI](https://github.com/surinp3/smarttube-mobile/actions/runs/43605400544)
+and [TV CI](https://github.com/surinp3/smarttube-mobile/actions/runs/43605400475)
+succeeded, including eight news regressions and the existing playback, locale,
+buffer, Rumble, TV player and maintenance gates. Both local release assemblies
+also passed. A fresh Linux-style patch replay matched the tested source.
+
+[Mobile v22](https://github.com/surinp3/smarttube-mobile/releases/tag/v22) uses
+code 2475; [TV v16](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v16)
+uses 3016. All four APKs passed signature, permanent-certificate, package, ABI
+and non-debug checks. All four public GitHub downloads and three TV mirror
+downloads returned 200 and matched the signed artifact sizes and SHA-256
+hashes. Mobile latest is v22. The TV updater entry uses code 3016 and the
+verified tv-v16 mirror paths. See [release evidence](release-verification/news-v22-tv-v16.json).
+
+The live probe verifies four Swedish publisher clips and 24 English items,
+not 24 Swedish items or a broad Swedish general-news selection. Counts and
+availability change over time. Real phone/TV rendering, remote operation,
+spoken audio language and actual playback remain unverified. Previous
+v21/tv-v15 releases and manifest history remain; future recovery requires
+unused v23/tv-v17 or higher and codes at least 2476/3017. The sync service
+health check passed, and backend code/SQLite were unchanged.

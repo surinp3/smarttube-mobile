@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -106,6 +106,15 @@
       "Applies a working Today search filter, rejects old clips and Thai results, and removes duplicate videos",
       "Targets up to 24 news videos per language with a limit of eight per publisher; actual availability varies",
       "Preserves related videos below the player, playback recovery, adaptive temporary buffering, Rumble and sync"
+    ]
+  },
+  "32.69-tv.16": {
+    "versionCode": 3016,
+    "changelog": [
+      "Adds live-verified Swedish business-news publishers EFN Ekonomikanalen and Dagens industri",
+      "A real app-client probe returned four Swedish videos plus 24 English breaking-news videos; current availability varies",
+      "Keeps Swedish and English source budgets separate so slow Swedish requests cannot suppress English results",
+      "Preserves Thai and stale-content exclusion, duplicate removal, per-publisher limits, playback recovery, player suggestions, buffering, Rumble and sync"
     ]
   }
 }
