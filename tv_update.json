@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v11/SmartTube-Pat-TV-v11-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v12/SmartTube-Pat-TV-v12-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v11/SmartTube-Pat-TV-v11-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v12/SmartTube-Pat-TV-v12-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v11/SmartTube-Pat-TV-v11-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v12/SmartTube-Pat-TV-v12-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -71,6 +71,14 @@
     "changelog": [
       "Starts on the first video in Recent from your channels when available",
       "Shows 19 recent videos before the next section, with Show more revealing up to 19 additional videos per click"
+    ]
+  },
+  "32.69-tv.12": {
+    "versionCode": 3012,
+    "changelog": [
+      "Improves YouTube playback when SABR authentication briefly fails",
+      "Recovers from repeatedly stalled streams sooner",
+      "Preserves Rumble, sync, TV buffering and your DNS preference"
     ]
   }
 }

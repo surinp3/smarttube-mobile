@@ -76,7 +76,7 @@ An overlapping local Gradle invocation failed with missing ExoPlayer core symbol
 the subsequent sequential mobile build passed. Build/test success is separate
 from on-device playback verification.
 ADB listed no attached devices, so device logs and phone/TV playback remain
-unverified. Local debug APKs retain the current public version names; they are
+unverified. Initial local debug APKs retain the v18/tv-v11 version names; they are
 validation artifacts, not production updates.
 
 ## Signed release and rollback
@@ -96,3 +96,23 @@ new release numbers at least v20/tv-v13 and versionCodes above 2472/3012. Use th
 existing signing key and install the recovery in place. The recovery workflow
 now also applies the selected source's `pat-sync.patch`, preserving its mobile,
 Rumble and sync features before the recovery version is raised.
+
+## Publication verification (November 14)
+
+Both signed workflows succeeded for commit
+`50fab7e1364fc196fa4f447280e428411e797e4f`:
+[Mobile build](https://github.com/surinp3/smarttube-mobile/actions/runs/43545991297)
+and [TV build](https://github.com/surinp3/smarttube-mobile/actions/runs/43545991207).
+The [Mobile v19](https://github.com/surinp3/smarttube-mobile/releases/tag/v19)
+and [TV v12](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v12)
+releases were published after verifying all four APKs. Each has the expected
+package ID, higher versionCode, required ARM architecture, no debuggable flag,
+and valid v1/v2 signatures matching the previous production certificate:
+`98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba`.
+
+The unauthenticated latest-release API returns Mobile v19. Public GitHub APKs
+and all three TV mirror copies were downloaded and matched to the signed
+release SHA-256 digests. TV updater versionCode 3012 uses the existing
+`jobhub.asia/downloads/smarttube-tv/tv-v12/` mirror, preserving previous manifest
+entries and downloads. No sync backend or SQLite database was deployed or changed.
+Phone and Google TV playback still require device confirmation.
