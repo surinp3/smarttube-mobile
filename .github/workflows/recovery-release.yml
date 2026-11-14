@@ -109,6 +109,10 @@ jobs:
             git -C upstream apply --check ../known-good/pat-sync.patch
             git -C upstream apply ../known-good/pat-sync.patch
           fi
+          if [ "$RECOVERY_APP" = 'tv' ] && [ -f known-good/tv-player.patch ]; then
+            git -C upstream apply --check ../known-good/tv-player.patch
+            git -C upstream apply ../known-good/tv-player.patch
+          fi
           python3 scripts/prepare_recovery.py \
             --app "$RECOVERY_APP" \
             --known-good-tag "$KNOWN_GOOD_TAG" \

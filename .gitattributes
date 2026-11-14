@@ -4,3 +4,4 @@ mediaservice.patch -text
 pat-sync.patch -text
 tv.patch -text
 tv-mediaservice.patch -text
+tv-player.patch -text

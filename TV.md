@@ -9,7 +9,11 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - After 12 seconds of cumulative buffering within a minute, TV VOD playback tries another client rather than blindly reloading the same one. SABR reload-token fixes from the pinned upstream revision remain in place.
 - Never silently changes a user's DNS preference to Google DNS during stall recovery.
 - Separate signed `tv-v13` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
-- Player suggestions rank by watched subject first and channel second. News requests prefer Swedish/Sweden coverage, with English breaking news as a fallback. See [behavior and validation](DISCOVERY_AND_BUFFERING.md).
+- **Related videos** in the player controls opens subject-first suggestions below
+  the playing video; a focusable retry card appears when results are unavailable.
+  See the [TV v14 player fix and tests](TV_PLAYER_SUGGESTIONS.md).
+  News requests prefer Swedish/Sweden coverage, with English breaking news as a fallback.
+  See [news and buffer behavior](DISCOVERY_AND_BUFFERING.md).
 - **Follow on Rumble** in the YouTube player controls looks up the creator.
   Choose a channel to save it to your synced SmartTube follows.
 - The main sidebar opens **YouTube**, **Rumble** or **Both**. **Both** mixes

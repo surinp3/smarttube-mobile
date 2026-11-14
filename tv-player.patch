@@ -1,0 +1,546 @@
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
+@@ -40,6 +40,45 @@
+             return Boolean.compare(sameChannel(current, right), sameChannel(current, left));
+         });
+         return result;
++    }
++
++    /** TV watch-next must survive ordinary title variation, while still requiring subject evidence. */
++    public static List<Video> rankForPlayback(Video current, List<Video> candidates) {
++        List<Video> result = new ArrayList<>();
++        if (current == null || candidates == null) return result;
++        Set<String> seen = new HashSet<>();
++        for (Video item : candidates) {
++            if (item == null || item.videoId == null || item.videoId.equals(current.videoId) ||
++                    item.isChapter || item.isUpcoming || item.isUnplayable || !seen.add(item.videoId)) continue;
++            if (playbackScore(current, item) > 0) result.add(item);
++        }
++        java.util.Collections.sort(result, (left, right) -> {
++            int subject = Integer.compare(playbackScore(current, right), playbackScore(current, left));
++            return subject != 0 ? subject : Boolean.compare(sameChannel(current, right), sameChannel(current, left));
++        });
++        return result;
++    }
++
++    public static int playbackScore(Video current, Video candidate) {
++        int strict = score(current, candidate);
++        if (strict > 0) return 1000 + strict;
++        Set<String> subject = terms(current != null ? current.getTitle() : null);
++        Set<String> other = terms(candidate != null ? candidate.getTitle() : null);
++        int overlap = 0;
++        for (String term : subject) if (other.contains(term) && term.length() >= 3) overlap++;
++        // Requiring a word from the final third erased relevant titles with different word order.
++        // Partial matches remain below strong matches; publisher alone never qualifies.
++        if (overlap < 2 && !(subject.size() <= 3 && overlap == 1 &&
++                subject.stream().anyMatch(term -> term.length() >= 4 && other.contains(term)))) return 0;
++        if (subject.size() >= 4) {
++            List<String> ordered = new ArrayList<>(subject);
++            boolean topic = false;
++            for (int index = ordered.size() / 2; index < ordered.size(); index++)
++                if (other.contains(ordered.get(index))) topic = true;
++            if (!topic) return 0;
++        }
++        return (int) (500.0 * overlap / Math.max(1, subject.size()) +
++                200.0 * overlap / Math.max(1, other.size()));
+     }
+ 
+     public static int score(Video current, Video candidate) {
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java
+@@ -43,6 +43,7 @@
+     public boolean isQueue;
+     public boolean isRelatedSuggestions;
+     public String lastRelatedContinuationKey;
++    public String relatedMessage;
+ 
+     public static VideoGroup from(BrowseSection section) {
+         return from((MediaGroup) null, section);
+@@ -194,7 +195,7 @@
+ 
+     public void rankRelated(Video current) {
+         isRelatedSuggestions = true;
+-        mVideos = com.liskovsoft.smartyoutubetv2.common.misc.RelatedVideoRanker.rank(current, mVideos);
++        mVideos = com.liskovsoft.smartyoutubetv2.common.misc.RelatedVideoRanker.rankForPlayback(current, mVideos);
+         // A continuation may contain better matches than the first page.
+         mAction = ACTION_REPLACE;
+     }
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
+@@ -261,7 +261,23 @@
+         }
+ 
+         clearSuggestionsIfNeeded(video);
++        showRelatedStatus("Loading related videos…");
+         loadMetadata(video, metadata -> updateSuggestions(metadata, video));
++    }
++
++    public void retrySuggestions() {
++        mSuggestionGeneration++;
++        mSuggestionsVideoId = null;
++        loadSuggestions(getVideo());
++    }
++
++    private void showRelatedStatus(String message) {
++        if (getPlayer() == null || GeneralData.instance(getContext()).isChildModeEnabled() ||
++                getPlayerTweaksData().isSuggestionsDisabled()) return;
++        VideoGroup status = VideoGroup.from(new ArrayList<Video>());
++        status.isRelatedSuggestions = true;
++        status.relatedMessage = message;
++        getPlayer().updateSuggestions(status);
+     }
+ 
+     private void loadMetadata(Video video, OnMetadata callback) {
+@@ -292,6 +308,7 @@
+                             if (!Helpers.containsAny(message, "fromNullable result is null")) {
+                                 MessageHelpers.showLongMessage(getContext(), "loadSuggestions error: %s", message);
+                             }
++                            if (isCurrentSuggestion(generation, video.videoId)) loadSubjectSuggestions(video);
+                             error.printStackTrace();
+                         }
+                 );
+@@ -408,9 +425,11 @@
+ 
+         List<MediaGroup> suggestions = mediaItemMetadata.getSuggestions();
+ 
++        showRelatedStatus("Loading related videos…");
+         if (suggestions == null) {
+             String msg = "loadSuggestions: Can't obtain suggestions for video: " + video.getTitle();
+             Log.e(TAG, msg);
++            loadSubjectSuggestions(video);
+             return;
+         }
+ 
+@@ -466,8 +485,8 @@
+         }
+ 
+         java.util.Collections.sort(relatedGroups, (left, right) -> Integer.compare(
+-                RelatedVideoRanker.bestScore(video, right.getVideos()),
+-                RelatedVideoRanker.bestScore(video, left.getVideos())));
++                bestPlaybackScore(video, right.getVideos()),
++                bestPlaybackScore(video, left.getVideos())));
+         for (VideoGroup group : relatedGroups) {
+             if (TextUtils.isEmpty(group.getTitle())) group.setTitle(getContext().getString(R.string.suggestions));
+             if (!group.isEmpty()) {
+@@ -479,9 +498,19 @@
+         if (suggestRows < 0 && relatedCount < 6) loadSubjectSuggestions(video);
+     }
+ 
++    private int bestPlaybackScore(Video current, List<Video> candidates) {
++        int result = 0;
++        for (Video candidate : candidates) result = Math.max(result, RelatedVideoRanker.playbackScore(current, candidate));
++        return result;
++    }
++
+     private void loadSubjectSuggestions(Video current) {
++        if (GeneralData.instance(getContext()).isChildModeEnabled() || getPlayerTweaksData().isSuggestionsDisabled()) return;
+         String query = RelatedVideoRanker.subjectQuery(current);
+-        if (query == null) return;
++        if (query == null) {
++            showRelatedStatus("No subject available. Select to retry.");
++            return;
++        }
+         final int generation = mSuggestionGeneration;
+         Disposable search = mContentService.getSearchObserve(query, SearchOptions.TYPE_VIDEO)
+                 .subscribe(groups -> {
+@@ -490,14 +519,22 @@
+                     if (groups != null) for (MediaGroup group : groups) {
+                         if (group != null) candidates.addAll(VideoGroup.from(group).getVideos());
+                     }
+-                    VideoGroup related = VideoGroup.from(RelatedVideoRanker.rank(current, candidates));
+-                    if (related.isEmpty()) return;
++                    VideoGroup related = VideoGroup.from(RelatedVideoRanker.rankForPlayback(current, candidates));
++                    if (related.isEmpty()) {
++                        showRelatedStatus("No related videos found. Select to retry.");
++                        return;
++                    }
++                    related.isRelatedSuggestions = true;
+                     related.setTitle("More on this subject");
+                     related.setId((current.videoId + ":subject").hashCode());
+                     related.setType(MediaGroup.TYPE_SUGGESTIONS);
+                     getPlayer().updateSuggestions(related);
+                     mBrowseProcessor.process(related);
+-                }, error -> Log.d(TAG, "Subject suggestions unavailable"));
++                }, error -> {
++                    if (isCurrentSuggestion(generation, current.videoId))
++                        showRelatedStatus("Related videos unavailable. Select to retry.");
++                    Log.d(TAG, "Subject suggestions unavailable");
++                });
+         mActions.add(search);
+     }
+ 
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/PlaybackFragment.java
+@@ -13,6 +13,8 @@
+ import android.view.View;
+ import android.view.ViewGroup;
+ import android.view.ViewStub;
++import android.widget.Button;
++import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.SuggestionsController;
+ 
+ import androidx.annotation.NonNull;
+ import androidx.annotation.Nullable;
+@@ -339,7 +341,7 @@
+         return selectedPosition;
+     }
+ 
+-    private void setPlayerRowIndex(int index) {
++    protected void setPlayerRowIndex(int index) {
+         if (mRowsSupportFragment != null && mRowsSupportFragment.getVerticalGridView() != null) {
+             mRowsSupportFragment.getVerticalGridView().setSelectedPosition(index);
+         }
+@@ -494,6 +496,7 @@
+ 
+         OnActionClickedListener playerActionListener = new PlayerActionListener();
+         mPlayerGlue = new VideoPlayerGlue(getContext(), playerAdapter, playerActionListener); // NOTE: possible context memory leak
++        mPlayerGlue.setRelatedVideosHandler(this::showRelatedVideos);
+         mPlayerGlue.setHost(new SurfacePlaybackFragmentGlueHost(this));
+         mPlayerGlue.setSeekEnabled(true);
+         // Static sabr timeline doesn't know the live stream state. Ask the controller when needed (like dash does)
+@@ -703,6 +706,9 @@
+         mRowsAdapter.add(mPlayerGlue.getControlsRow());
+ 
+         setAdapter(mRowsAdapter);
++        java.util.List<VideoGroup> pending = new java.util.ArrayList<>(mPendingSuggestions);
++        mPendingSuggestions.clear();
++        for (VideoGroup group : pending) updateSuggestions(group);
+     }
+ 
+     private void initPresenters() {
+@@ -759,6 +765,10 @@
+                 RowPresenter.ViewHolder rowViewHolder,
+                 Row row) {
+ 
++            if (row == mRelatedStatusRow) {
++                retryRelatedVideos();
++                return;
++            }
+             if (item instanceof Video) {
+                 mPlaybackPresenter.onSuggestionItemClicked((Video) item);
+             }
+@@ -1368,18 +1378,89 @@
+         return mDebugInfoManager != null && mDebugInfoManager.isShown();
+     }
+ 
++    private final java.util.List<VideoGroup> mPendingSuggestions = new java.util.ArrayList<>();
++    private ListRow mRelatedStatusRow;
++
++    public void showRelatedVideos() {
++        if (forbidShowOverlay(true)) return;
++        if (getPlayerTweaksData().isSuggestionsDisabled()) {
++            com.liskovsoft.sharedutils.helpers.MessageHelpers.showMessage(getContext(), "Enable video suggestions in Player settings.");
++            return;
++        }
++        showOverlay(true);
++        if (mRowsAdapter == null) return;
++        for (int index = SUGGESTIONS_START_INDEX; index < mRowsAdapter.size(); index++) {
++            Object row = mRowsAdapter.get(index);
++            if (!(row instanceof ListRow)) continue;
++            ObjectAdapter rowAdapter = ((ListRow) row).getAdapter();
++            if (!(rowAdapter instanceof VideoGroupObjectAdapter)) continue;
++            VideoGroupObjectAdapter adapter = (VideoGroupObjectAdapter) rowAdapter;
++            for (VideoGroup group : adapter.getAllGroups()) {
++                if (group.isRelatedSuggestions && !group.isEmpty()) {
++                    setPlayerRowIndex(index);
++                    return;
++                }
++            }
++        }
++        if (mRelatedStatusRow == null) {
++            showRelatedStatus("Loading related videosÃ¢â‚¬Â¦ Select to retry.");
++            retryRelatedVideos();
++        }
++        if (mRelatedStatusRow != null) setPlayerRowIndex(mRowsAdapter.indexOf(mRelatedStatusRow));
++    }
++
++    protected void retryRelatedVideos() {
++        mPlaybackPresenter.getController(SuggestionsController.class).retrySuggestions();
++    }
++
++    private void showRelatedStatus(String message) {
++        if (mRowsAdapter == null) return;
++        for (VideoGroupObjectAdapter adapter : mVideoGroupAdapters.values()) {
++            if (!adapter.getAllGroups().isEmpty() && adapter.getAllGroups().get(0).isRelatedSuggestions && !adapter.isEmpty()) return;
++        }
++        if (mRelatedStatusRow != null) mRowsAdapter.remove(mRelatedStatusRow);
++        ArrayObjectAdapter status = new ArrayObjectAdapter(new RelatedStatusPresenter());
++        status.add(message);
++        mRelatedStatusRow = new ListRow(new HeaderItem(getString(R.string.pat_related_videos)), status);
++        mRowsAdapter.add(mRelatedStatusRow);
++    }
++
++    static final class RelatedStatusPresenter extends Presenter {
++        @Override public Presenter.ViewHolder onCreateViewHolder(ViewGroup parent) {
++            Button button = new Button(parent.getContext());
++            button.setTextSize(20);
++            button.setPadding(32, 24, 32, 24);
++            button.setLayoutParams(new ViewGroup.LayoutParams(
++                    (int) (480 * parent.getResources().getDisplayMetrics().density), ViewGroup.LayoutParams.WRAP_CONTENT));
++            button.setFocusable(true);
++            return new Presenter.ViewHolder(button);
++        }
++        @Override public void onBindViewHolder(Presenter.ViewHolder holder, Object item) {
++            ((Button) holder.view).setText((String) item);
++        }
++        @Override public void onUnbindViewHolder(Presenter.ViewHolder holder) { }
++    }
++
+     @Override
+     public void updateSuggestions(VideoGroup group) {
+         if (mRowsAdapter == null) {
+-            Log.e(TAG, "Related videos row not initialized yet.");
+-            return;
+-        }
+-
++            if (group != null) mPendingSuggestions.add(group);
++            return;
++        }
++
++        if (group != null && group.relatedMessage != null) {
++            showRelatedStatus(group.relatedMessage);
++            return;
++        }
+         if (group == null || group.isEmpty()) {
+             Log.e(TAG, "Suggestions row is empty!");
+             return;
+         }
+ 
++        if (group.isRelatedSuggestions && mRelatedStatusRow != null) {
++            mRowsAdapter.remove(mRelatedStatusRow);
++            mRelatedStatusRow = null;
++        }
+         if (group.getAction() == VideoGroup.ACTION_SYNC) {
+             VideoGroupObjectAdapter adapter = mVideoGroupAdapters.get(group.getId());
+             if (adapter != null) {
+@@ -1556,6 +1637,8 @@
+ 
+     @Override
+     public void clearSuggestions() {
++        mPendingSuggestions.clear();
++        mRelatedStatusRow = null;
+         if (mRowsAdapter != null && mRowsAdapter.size() > 1) {
+             mRowsAdapter.removeItems(SUGGESTIONS_START_INDEX, mRowsAdapter.size() - 1);
+         }
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java
+@@ -88,6 +88,9 @@
+     private final PlayerTweaksData mPlayerTweaksData;
+     private final GeneralData mGeneralData;
+     private int mPreviousAction = KeyEvent.ACTION_UP;
++    private Runnable mRelatedVideosHandler;
++
++    public void setRelatedVideosHandler(Runnable handler) { mRelatedVideosHandler = handler; }
+ 
+     public VideoPlayerGlue(
+             Context context,
+@@ -123,6 +126,8 @@
+             putAction(new Action(R.id.action_follow_rumble, context.getString(R.string.pat_follow_on_rumble),
+                     null, ContextCompat.getDrawable(context, R.drawable.action_follow_rumble)));
+         }
++        putAction(new Action(R.id.action_related_videos, context.getString(R.string.pat_related_videos),
++                null, ContextCompat.getDrawable(context, R.drawable.action_related_videos)));
+         putAction(new VideoInfoAction(context));
+         putAction(new VideoSpeedAction(context));
+         putAction(new VideoStatsAction(context));
+@@ -151,6 +156,7 @@
+             super.onCreatePrimaryActions(adapter);
+         }
+ 
++        adapter.add(mActions.get(R.id.action_related_videos));
+         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_PREVIOUS)) {
+             adapter.add(mSkipPreviousAction);
+         }
+@@ -399,6 +405,11 @@
+ 
+         boolean handled = false;
+ 
++        if (action.getId() == R.id.action_related_videos) {
++            if (mRelatedVideosHandler != null) mRelatedVideosHandler.run();
++            return true;
++        }
++
+         // Primary actions are handled manually.
+         if (action == mRewindAction) {
+             rewind();
+diff --git a/smarttubetv/src/main/res/values/pat_tv_related.xml b/smarttubetv/src/main/res/values/pat_tv_related.xml
+new file mode 100644
+--- /dev/null
++++ b/smarttubetv/src/main/res/values/pat_tv_related.xml
+@@ -0,0 +1,4 @@
++<resources>
++    <item name="action_related_videos" type="id" />
++    <string name="pat_related_videos">Related videos</string>
++</resources>
+diff --git a/smarttubetv/src/main/res/drawable/action_related_videos.xml b/smarttubetv/src/main/res/drawable/action_related_videos.xml
+new file mode 100644
+--- /dev/null
++++ b/smarttubetv/src/main/res/drawable/action_related_videos.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FFFFFFFF" android:pathData="M3,4h8v7H3zM13,4h8v7h-8zM3,13h8v7H3zM13,13h8v7h-8z" />
++</vector>
+diff --git a/smarttubetv/src/test/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/TvPlayerSuggestionsTest.java b/smarttubetv/src/test/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/TvPlayerSuggestionsTest.java
+new file mode 100644
+--- /dev/null
++++ b/smarttubetv/src/test/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/TvPlayerSuggestionsTest.java
+@@ -0,0 +1,155 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.playback;
++
++import static org.junit.Assert.*;
++import android.content.Context;
++import android.view.ViewGroup;
++import android.widget.Button;
++import android.widget.FrameLayout;
++import androidx.leanback.media.PlayerAdapter;
++import androidx.leanback.widget.*;
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
++import com.liskovsoft.smartyoutubetv2.common.misc.RelatedVideoRanker;
++import com.liskovsoft.smartyoutubetv2.tv.R;
++import com.liskovsoft.smartyoutubetv2.tv.ui.playback.other.VideoPlayerGlue;
++import java.lang.reflect.Field;
++import java.util.*;
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.RobolectricTestRunner;
++import org.robolectric.RuntimeEnvironment;
++import org.robolectric.annotation.Config;
++
++@RunWith(RobolectricTestRunner.class)
++@Config(sdk = 28)
++public class TvPlayerSuggestionsTest {
++    private static void set(Object object, String name, Object value) throws Exception {
++        Field field = PlaybackFragment.class.getDeclaredField(name);
++        field.setAccessible(true);
++        field.set(object, value);
++    }
++    private static Object get(Object object, String name) throws Exception {
++        Field field = PlaybackFragment.class.getDeclaredField(name);
++        field.setAccessible(true);
++        return field.get(object);
++    }
++    private static Video video(String id, String title, String channel) {
++        Video video = new Video(); video.videoId = id; video.title = title; video.channelId = channel;
++        return video;
++    }
++    private PlaybackFragment fragment() throws Exception {
++        PlaybackFragment fragment = new PlaybackFragment();
++        set(fragment, "mVideoGroupAdapters", new HashMap<>());
++        set(fragment, "mCardPresenter", new com.liskovsoft.smartyoutubetv2.tv.presenter.VideoCardPresenter());
++        return fragment;
++    }
++    private static final class NavigationFragment extends PlaybackFragment {
++        int selected = -1, retries;
++        @Override public Context getContext() { return RuntimeEnvironment.getApplication(); }
++        @Override public void showOverlay(boolean show) {}
++        @Override protected void setPlayerRowIndex(int index) { selected = index; }
++        @Override protected void retryRelatedVideos() { retries++; }
++    }
++    @Test public void relatedActionSkipsChaptersAndPlaylistAndRetryRespondsToSelection() throws Exception {
++        NavigationFragment fragment = new NavigationFragment();
++        set(fragment, "mVideoGroupAdapters", new HashMap<>());
++        set(fragment, "mCardPresenter", new com.liskovsoft.smartyoutubetv2.tv.presenter.VideoCardPresenter());
++        ArrayObjectAdapter rows = new ArrayObjectAdapter(); rows.add(new Object());
++        set(fragment, "mRowsAdapter", rows);
++        VideoGroup playlist = VideoGroup.from(Collections.singletonList(video("playlist", "Playlist item", "a")));
++        playlist.setId(11);
++        fragment.updateSuggestions(playlist);
++        VideoGroup related = VideoGroup.from(Collections.singletonList(video("subject", "Heat pump repair", "b")));
++        related.setId(12);
++        related.isRelatedSuggestions = true;
++        fragment.updateSuggestions(related);
++        fragment.showRelatedVideos();
++        assertEquals(2, fragment.selected);
++        assertEquals(0, fragment.retries);
++        fragment.clearSuggestions();
++        fragment.showRelatedVideos();
++        assertEquals(1, fragment.selected);
++        assertEquals(1, fragment.retries);
++        ListRow status = (ListRow) rows.get(1);
++        Class<?> listenerClass = Class.forName(PlaybackFragment.class.getName() + "$ItemViewClickedListener");
++        java.lang.reflect.Constructor<?> constructor = listenerClass.getDeclaredConstructor(PlaybackFragment.class);
++        constructor.setAccessible(true);
++        OnItemViewClickedListener listener = (OnItemViewClickedListener) constructor.newInstance(fragment);
++        listener.onItemClicked(null, status.getAdapter().get(0), null, status);
++        assertEquals(2, fragment.retries);
++    }
++    @Test public void earlyResultsAreRetainedAndClearCancelsStaleRows() throws Exception {
++        PlaybackFragment fragment = fragment();
++        VideoGroup group = VideoGroup.from(Collections.singletonList(video("related", "Heat pump repair", "b")));
++        group.isRelatedSuggestions = true;
++        fragment.updateSuggestions(group);
++        List<?> pending = (List<?>) get(fragment, "mPendingSuggestions");
++        assertEquals(1, pending.size());
++        fragment.clearSuggestions();
++        assertEquals(0, pending.size());
++        ArrayObjectAdapter rows = new ArrayObjectAdapter();
++        rows.add(new Object()); // transport row remains first
++        set(fragment, "mRowsAdapter", rows);
++        fragment.updateSuggestions(group);
++        assertEquals(2, rows.size());
++        assertSame(group.get(0), ((ListRow) rows.get(1)).getAdapter().get(0));
++    }
++    @Test public void statusCardIsFocusableAndReplacedByPlayableRelatedRow() throws Exception {
++        Context context = RuntimeEnvironment.getApplication();
++        PlaybackFragment.RelatedStatusPresenter presenter = new PlaybackFragment.RelatedStatusPresenter();
++        Presenter.ViewHolder holder = presenter.onCreateViewHolder(new FrameLayout(context));
++        presenter.onBindViewHolder(holder, "Related videos unavailable. Select to retry.");
++        assertTrue(holder.view.isFocusable());
++        assertTrue(((Button) holder.view).getText().toString().contains("retry"));
++        PlaybackFragment fragment = fragment();
++        ArrayObjectAdapter rows = new ArrayObjectAdapter(); rows.add(new Object());
++        set(fragment, "mRowsAdapter", rows);
++        ArrayObjectAdapter status = new ArrayObjectAdapter(presenter); status.add("retry");
++        ListRow statusRow = new ListRow(new HeaderItem("Related videos"), status);
++        rows.add(statusRow); set(fragment, "mRelatedStatusRow", statusRow);
++        VideoGroup group = VideoGroup.from(Collections.singletonList(video("candidate", "Volvo battery repair", "b")));
++        group.isRelatedSuggestions = true;
++        fragment.updateSuggestions(group);
++        assertEquals(2, rows.size());
++        assertFalse(rows.get(1) == statusRow);
++        assertNull(get(fragment, "mRelatedStatusRow"));
++    }
++    private static final class Glue extends VideoPlayerGlue {
++        Glue(Context context) { super(context, new PlayerAdapter() {
++            @Override public void play() {}
++            @Override public void pause() {}
++        }, null); }
++        void primary(ArrayObjectAdapter actions) { onCreatePrimaryActions(actions); }
++    }
++    @Test public void visibleTransportActionOpensRelatedWithoutDispatchingPlayback() {
++        Glue glue = new Glue(RuntimeEnvironment.getApplication());
++        ArrayObjectAdapter actions = new ArrayObjectAdapter();
++        glue.primary(actions);
++        Action related = null;
++        for (int i = 0; i < actions.size(); i++) {
++            Action action = (Action) actions.get(i);
++            if (action.getId() == R.id.action_related_videos) related = action;
++        }
++        assertNotNull(related);
++        assertEquals("Related videos", related.getLabel1());
++        int[] calls = {0};
++        glue.setRelatedVideosHandler(() -> calls[0]++);
++        glue.onActionClicked(related);
++        assertEquals(1, calls[0]);
++    }
++    @Test public void variedTitlesKeepSubjectMatchesButRejectSameChannelRandomVideo() {
++        Video current = video("current", "Sony A7 IV autofocus settings for wildlife photography", "same");
++        Video strong = video("strong", "Sony A7 IV autofocus wildlife photography settings", "other");
++        Video varied = video("varied", "Sony A7 IV autofocus tips", "other");
++        Video random = video("random", "Making pizza for dinner", "same");
++        Video wrongTask = video("wrong-task", "Sony A7 IV battery replacement", "same");
++        List<Video> result = RelatedVideoRanker.rankForPlayback(current, Arrays.asList(random, wrongTask, varied, strong, varied, current));
++        assertEquals(Arrays.asList(strong, varied), result);
++        assertEquals(0, RelatedVideoRanker.score(current, varied));
++        assertTrue(RelatedVideoRanker.playbackScore(current, varied) > 0);
++        Video water = video("water", "How to replace a household water filter cartridge", "a");
++        Video cartridge = video("cartridge", "Water filter cartridge replacement", "b");
++        assertEquals(Collections.singletonList(cartridge), RelatedVideoRanker.rankForPlayback(water,
++                Arrays.asList(video("random2", "Stock market update", "a"), cartridge)));
++    }
++}
