@@ -92,7 +92,9 @@ Google TV Streamer. Debug APKs cannot update installed production APKs.
 Previous releases and their assets remain available. If recovery is needed,
 select a source release confirmed to work on the device in the manual recovery
 workflow. For example, restoring the previous v18/tv-v11 sources would require
-new release numbers at least v20/tv-v13 and versionCodes above 2472/3012. Use the
+unused release numbers higher than every published version and versionCodes
+higher than the currently installed build. After Mobile v20 / TV v13, that
+means at least v21/tv-v14 with codes 2474/3014. Use the
 existing signing key and install the recovery in place. The recovery workflow
 now also applies the selected source's `pat-sync.patch`, preserving its mobile,
 Rumble and sync features before the recovery version is raised.

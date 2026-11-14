@@ -92,3 +92,27 @@ manual higher-version recovery workflow remain available. Source pins, sync
 backend and its SQLite database are unchanged. Actual phone/Google TV playback,
 recommendation quality, live news content and memory pressure on those devices
 remain to be confirmed; automated tests and builds are not device verification.
+
+## Published release verification
+
+Final APK source: `21795415b2f6f99e39fdc1195cffe6b74a8e283d`.
+Both production workflows succeeded:
+[Mobile](https://github.com/surinp3/smarttube-mobile/actions/runs/43576801673) and
+[TV](https://github.com/surinp3/smarttube-mobile/actions/runs/43576801676).
+All 14 fixture/maintenance checks, six SABR cases, eight common buffer/news
+cases, and two Rumble cases passed in the final release gates.
+
+[Mobile v20](https://github.com/surinp3/smarttube-mobile/releases/tag/v20) and
+[TV v13](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v13) were
+published after verification. All four APKs have the expected packages, higher
+codes, ARM architectures, no debuggable flag, and valid signatures matching the
+existing production certificate
+`98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba`.
+Four public GitHub downloads and three public TV mirror downloads matched the
+signed APK sizes and SHA-256 digests. The mobile latest-release API returns v20;
+the TV manifest uses code 3013 and the verified `tv-v13` mirror paths.
+
+Previous v19/tv-v12 assets are retained. Their complete app/Rumble/sync source
+replay and higher-version recovery preparation were checked: a future recovery
+would need unused v21/tv-v14 or higher and codes at least 2474/3014. No recovery
+was executed, no app was uninstalled, and no production database was migrated.
