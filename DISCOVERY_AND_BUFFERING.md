@@ -27,14 +27,12 @@ videos. Real recommendation quality still needs confirmation on the devices.
 
 ## News preference
 
-Dedicated YouTube News requests explicitly use Swedish / Sweden (`sv`, `SE`),
-including canonical `hl`/`gl` and TV compatibility fields. They do not change
-global app/account language or region. Results require a recognized Swedish
-publisher or a Sweden-related headline, and Thai-script headlines/authors are
-rejected. If those rows are empty or unavailable, an explicit English / UK
-request (`en`, `GB`) may supply English breaking-news rows or headlines. It
-never falls back to device-local Thai news. News rows are bounded snapshots;
-unscoped continuation tokens are not used. Refresh fetches new preferred news.
+Mobile v21 / TV v15 fill dedicated YouTube News from explicit Swedish/Sweden
+and English/UK publisher searches, up to 24 videos per language with eight per
+publisher. One Swedish result no longer suppresses English news. A supported
+Today search parameter and parsed TV age metadata prevent old broadcasts from
+filling the section; publisher checks exclude satire, history and unrelated
+uploads. Thai-script items are rejected. See [the fix, limits and live probe](NEWS_FEED_FIX.md).
 
 Automatic Rumble news seeds use a shared `breaking news` query and require an
 English breaking headline; Thai and unrelated results are discarded. News-topic
@@ -114,5 +112,5 @@ the TV manifest uses code 3013 and the verified `tv-v13` mirror paths.
 
 Previous v19/tv-v12 assets are retained. Their complete app/Rumble/sync source
 replay and higher-version recovery preparation were checked: a future recovery
-would need unused v21/tv-v15 or higher and codes at least 2474/3015. No recovery
+would need unused v22/tv-v16 or higher and codes at least 2475/3016. No recovery
 was executed, no app was uninstalled, and no production database was migrated.

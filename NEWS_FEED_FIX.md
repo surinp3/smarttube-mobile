@@ -48,5 +48,30 @@ Mobile v21 uses code 2474; TV v15 uses 3015. The permanent signing key, previous
 release assets and in-place higher-version recovery path are preserved.
 
 Actual phone/TV rendering, playback and remote operation are not verified.
-No device is connected; emulator acceleration is unavailable. Final signed
-artifact, public-download and updater checks are recorded after publication.
+No device is connected; emulator acceleration is unavailable.
+
+## Published verification
+
+Final APK source: `1de529762bf497991de79e43b8a7c6552917172d`.
+Both production workflows passed all gates and signed assembly:
+[Mobile](https://github.com/surinp3/smarttube-mobile/actions/runs/43603612109),
+[TV](https://github.com/surinp3/smarttube-mobile/actions/runs/43603612117).
+The 14 maintenance checks, seven news-feed cases, two locale cases, six buffer
+cases, six SABR cases, two Rumble cases and five TV player cases passed where
+applicable. Both local release assemblies also succeeded.
+
+[Mobile v21](https://github.com/surinp3/smarttube-mobile/releases/tag/v21) and
+[TV v15](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v15) are
+published. All four APKs passed package, code, ABI, non-debug and signature
+verification against the permanent production certificate
+`98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba`.
+Four complete GitHub downloads and three complete TV mirror downloads returned
+200 and matched the signed artifact sizes and SHA-256 digests. Mobile latest
+is v21; the TV updater uses code 3015 and verified tv-v15 mirror paths.
+See [artifact and public-download evidence](release-verification/news-v21-tv-v15.json).
+
+Previous v20/tv-v14 assets and TV manifest history remain. Future in-place
+recovery needs unused v22/tv-v16 or higher and codes at least 2475/3016.
+The sync health check passed; backend code and SQLite were not changed.
+Existing Java 11/WorkManager lint-registry compatibility warnings remain;
+full lint coverage is not claimed. Real device behavior remains unverified.

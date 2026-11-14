@@ -2,11 +2,11 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v20** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
+Version **v21** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
 
 - Player suggestions prioritize the watched subject, with channel as a tie-breaker.
-- News prefers Swedish/Sweden coverage with an English breaking-news fallback;
-  automatic news does not use the device's Thai region.
+- News fills from fresh Swedish/Sweden and English breaking-news publisher searches,
+  independent of the device's Thai region. See the [news fix and live results](NEWS_FEED_FIX.md).
 - Adaptive temporary VOD read-ahead targets up to 500 MB where heap capacity
   permits, scales down on smaller devices, and frees consumed/unused buffers.
   It does not promise a full-video or offline download. See

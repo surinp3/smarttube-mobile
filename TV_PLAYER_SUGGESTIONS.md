@@ -58,7 +58,7 @@ See [machine-readable verification](release-verification/tv-v14.json).
 
 The updater entry uses code 3014 and the verified mirror paths. Mobile latest
 remains v20. Previous TV v13 release files and manifest entries are retained;
-a future in-place recovery must use an unused tv-v15/code 3015 or higher.
+a future in-place recovery must use an unused tv-v16/code 3016 or higher.
 No signing key was changed and no app was uninstalled. The sync service health
 check passed; its code and SQLite database were not changed.
 

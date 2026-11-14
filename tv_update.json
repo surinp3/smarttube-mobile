@@ -1,11 +1,11 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-Universal.apk",
+    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-ARMv7.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-ARMv7.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v14/SmartTube-Pat-TV-v14-ARM64.apk"
+      "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-ARM64.apk"
     ]
   },
   "32.69-tv.3": {
@@ -96,6 +96,16 @@
       "Keeps strong subject matches first and allows relevant title variation; channel only breaks equal subject scores",
       "Shows a focusable retry card when related videos are loading or unavailable, and retains results arriving before player rows initialize",
       "Preserves Sweden/Swedish or English breaking news, adaptive temporary buffering, SABR recovery, Rumble and sync"
+    ]
+  },
+  "32.69-tv.15": {
+    "versionCode": 3015,
+    "changelog": [
+      "Fixes the news section stopping after one Swedish video; fills from multiple preferred news sources",
+      "Uses Swedish/Sweden searches and English breaking-news searches from recognized publishers, independent of device location",
+      "Applies a working Today search filter, rejects old clips and Thai results, and removes duplicate videos",
+      "Targets up to 24 news videos per language with a limit of eight per publisher; actual availability varies",
+      "Preserves related videos below the player, playback recovery, adaptive temporary buffering, Rumble and sync"
     ]
   }
 }

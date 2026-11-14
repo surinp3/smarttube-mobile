@@ -1,0 +1,116 @@
+{
+  "sourceCommit": "1de529762bf497991de79e43b8a7c6552917172d",
+  "mobileCi": "https://github.com/surinp3/smarttube-mobile/actions/runs/43603612109",
+  "tvCi": "https://github.com/surinp3/smarttube-mobile/actions/runs/43603612117",
+  "ciConclusion": "success",
+  "liveNewsProbe": "news-live-20261114.json",
+  "apks": [
+    {
+      "tag": "v21",
+      "name": "SmartTube-Mobile-v21-ARM64.apk",
+      "package": "app.smarttube.mobile",
+      "versionCode": 2474,
+      "versionName": "32.69-mobile.21",
+      "sha256": "2547087eca4b2f05a52a85599d1bd1f47c1f8c45ae0bb239794c4bf1b9323126",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 56306426,
+      "nativeCode": "native-code: 'arm64-v8a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/v21",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/v21/SmartTube-Mobile-v21-ARM64.apk"
+    },
+    {
+      "tag": "tv-v15",
+      "name": "SmartTube-Pat-TV-v15-ARMv7.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3015,
+      "versionName": "32.69-tv.15",
+      "sha256": "f4e6be934eef6ac39a0fb6899f7d8ff2a89e61ce8cd9558fa7d6098e1d86d601",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 45729832,
+      "nativeCode": "native-code: 'armeabi-v7a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v15",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v15/SmartTube-Pat-TV-v15-ARMv7.apk"
+    },
+    {
+      "tag": "tv-v15",
+      "name": "SmartTube-Pat-TV-v15-ARM64.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3015,
+      "versionName": "32.69-tv.15",
+      "sha256": "de8a74b70cef528c5468817a619cd845e959622c1a7db09ba4ffaee1fa663233",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 56307572,
+      "nativeCode": "native-code: 'arm64-v8a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v15",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v15/SmartTube-Pat-TV-v15-ARM64.apk"
+    },
+    {
+      "tag": "tv-v15",
+      "name": "SmartTube-Pat-TV-v15-Universal.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3015,
+      "versionName": "32.69-tv.15",
+      "sha256": "4a6a1b7e216e88c46d82309377ce5b37294d0d5bb610810f6151e1411c9672d6",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 85617337,
+      "nativeCode": "native-code: 'arm64-v8a' 'armeabi-v7a'",
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v15",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v15/SmartTube-Pat-TV-v15-Universal.apk"
+    }
+  ],
+  "publicDownloads": [
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/v21/SmartTube-Mobile-v21-ARM64.apk",
+      "status": 200,
+      "sha256": "2547087eca4b2f05a52a85599d1bd1f47c1f8c45ae0bb239794c4bf1b9323126",
+      "size": 56306426
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v15/SmartTube-Pat-TV-v15-ARMv7.apk",
+      "status": 200,
+      "sha256": "f4e6be934eef6ac39a0fb6899f7d8ff2a89e61ce8cd9558fa7d6098e1d86d601",
+      "size": 45729832
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-ARMv7.apk",
+      "status": 200,
+      "sha256": "f4e6be934eef6ac39a0fb6899f7d8ff2a89e61ce8cd9558fa7d6098e1d86d601",
+      "size": 45729832
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v15/SmartTube-Pat-TV-v15-ARM64.apk",
+      "status": 200,
+      "sha256": "de8a74b70cef528c5468817a619cd845e959622c1a7db09ba4ffaee1fa663233",
+      "size": 56307572
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-ARM64.apk",
+      "status": 200,
+      "sha256": "de8a74b70cef528c5468817a619cd845e959622c1a7db09ba4ffaee1fa663233",
+      "size": 56307572
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v15/SmartTube-Pat-TV-v15-Universal.apk",
+      "status": 200,
+      "sha256": "4a6a1b7e216e88c46d82309377ce5b37294d0d5bb610810f6151e1411c9672d6",
+      "size": 85617337
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v15/SmartTube-Pat-TV-v15-Universal.apk",
+      "status": 200,
+      "sha256": "4a6a1b7e216e88c46d82309377ce5b37294d0d5bb610810f6151e1411c9672d6",
+      "size": 85617337
+    }
+  ],
+  "mobileLatestTag": "v21",
+  "tvUpdaterVersionCode": 3015,
+  "tvUpdaterBaselineBlob": "c2b2d0370deddbaa263a6a5c39703e47224979ac",
+  "devicePlayback": "not verified"
+}
