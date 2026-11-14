@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'tv.patch'
+      - 'news.patch'
+      - 'news-mediaservice.patch'
       - 'tv-player.patch'
       - 'pat-sync.patch'
       - 'mobile.patch'
@@ -19,6 +21,8 @@ on:
     branches: [main]
     paths:
       - 'tv.patch'
+      - 'news.patch'
+      - 'news-mediaservice.patch'
       - 'tv-player.patch'
       - 'pat-sync.patch'
       - 'mobile.patch'
@@ -60,10 +64,14 @@ jobs:
           git -C upstream apply ../mobile.patch
           git -C upstream/MediaServiceCore apply --check ../../mediaservice.patch
           git -C upstream/MediaServiceCore apply ../../mediaservice.patch
+          git -C upstream/MediaServiceCore apply --check ../../news-mediaservice.patch
+          git -C upstream/MediaServiceCore apply ../../news-mediaservice.patch
           git -C upstream apply --check ../tv.patch
           git -C upstream apply ../tv.patch
           git -C upstream apply --check ../pat-sync.patch
           git -C upstream apply ../pat-sync.patch
+          git -C upstream apply --check ../news.patch
+          git -C upstream apply ../news.patch
           git -C upstream apply --check ../tv-player.patch
           git -C upstream apply ../tv-player.patch
           git -C upstream/MediaServiceCore apply --check ../../tv-mediaservice.patch
@@ -138,7 +146,7 @@ jobs:
 
       - name: Verify temporary buffer and news locale behavior
         working-directory: upstream
-        run: ./gradlew :common:testStstableDebugUnitTest --tests '*SessionLoadControlTest' --tests '*PreferredNewsRequestTest' --stacktrace
+        run: ./gradlew :common:testStstableDebugUnitTest --tests '*SessionLoadControlTest' --tests '*PreferredNewsRequestTest' --tests '*PreferredNewsFeedTest' --stacktrace
 
       - name: Verify Rumble news filtering
         working-directory: upstream
@@ -172,15 +180,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v14-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v14-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v14-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v14-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v15-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v15-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v15-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v15-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v14-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v14-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v14-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v14-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v15-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v15-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v15-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v15-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -201,21 +209,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v14-SIGNED-APKs
+          name: SmartTube-Pat-TV-v15-SIGNED-APKs
           path: output
       - name: Stage TV release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v14 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v14 is already published; increment the TV version for the next release.'
+          if gh release view tv-v15 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v15 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v14 \
-              output/SmartTube-Pat-TV-v14-ARMv7.apk \
-              output/SmartTube-Pat-TV-v14-ARM64.apk \
-              output/SmartTube-Pat-TV-v14-Universal.apk \
+            gh release create tv-v15 \
+              output/SmartTube-Pat-TV-v15-ARMv7.apk \
+              output/SmartTube-Pat-TV-v15-ARM64.apk \
+              output/SmartTube-Pat-TV-v15-Universal.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v14 - Related videos below the player' \
-              --notes 'Adds a visible Related videos player control and remote-navigable related rows. Keeps strong subject matches first, accepts relevant title variation, and uses channel only for ties. Empty or unavailable results show a focusable retry card. Preserves preferred news, adaptive temporary buffering, SABR recovery, Rumble, sync and rollback. ARMv7, ARM64 and Universal APKs use the permanent signing key. Automated player UI tests pass; real TV playback and visual confirmation are still required.' \
+              --title 'SmartTube Pat TV v15 - Fresh Swedish and English news' \
+              --notes 'Fixes the news section stopping at one Swedish video. Collects fresh news from multiple Swedish and English breaking-news publishers, filters old clips, satire and Thai results, deduplicates videos and limits each publisher. Targets up to 24 videos per language as current sources permit. Preserves playback recovery, related-video controls, temporary buffering, Rumble, sync and rollback. Live feed probes and automated tests are recorded in NEWS_FEED_FIX.md; actual device playback remains unverified.' \
               --latest=false
           fi

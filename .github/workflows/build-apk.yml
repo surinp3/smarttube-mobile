@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Build and stage a signed v20 update'
+        description: 'Build and stage a signed v21 update'
         required: false
         type: boolean
         default: false
@@ -40,8 +40,12 @@ jobs:
           git -C upstream apply ../mobile.patch
           git -C upstream apply --check ../pat-sync.patch
           git -C upstream apply ../pat-sync.patch
+          git -C upstream apply --check ../news.patch
+          git -C upstream apply ../news.patch
           git -C upstream/MediaServiceCore apply --check ../../mediaservice.patch
           git -C upstream/MediaServiceCore apply ../../mediaservice.patch
+          git -C upstream/MediaServiceCore apply --check ../../news-mediaservice.patch
+          git -C upstream/MediaServiceCore apply ../../news-mediaservice.patch
           chmod +x upstream/gradlew
 
       - name: Set up Java 11
@@ -113,7 +117,7 @@ jobs:
 
       - name: Verify temporary buffer and news locale behavior
         working-directory: upstream
-        run: ./gradlew :common:testStstableDebugUnitTest --tests '*SessionLoadControlTest' --tests '*PreferredNewsRequestTest' --stacktrace
+        run: ./gradlew :common:testStstableDebugUnitTest --tests '*SessionLoadControlTest' --tests '*PreferredNewsRequestTest' --tests '*PreferredNewsFeedTest' --stacktrace
 
       - name: Verify Rumble news filtering
         working-directory: upstream
@@ -136,11 +140,11 @@ jobs:
           apk_path="$(find "upstream/smarttubetv/build/outputs/apk/stmobile/$variant" -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v20-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v20-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v21-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v21-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v20-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v20-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v21-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v21-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -161,17 +165,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v20-ARM64-APK
+          name: SmartTube-Mobile-v21-ARM64-APK
           path: output
       - name: Stage release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v20 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v20 is already published; increment the mobile version for the next release."
+          if gh release view v21 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v21 is already published; increment the mobile version for the next release."
           else
-            gh release create v20 output/SmartTube-Mobile-v20-ARM64.apk \
+            gh release create v21 output/SmartTube-Mobile-v21-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "SmartTube Mobile v20 — Relevant suggestions, preferred news and adaptive buffering" \
-              --notes "Player suggestions prioritize the watched subject, with channel as a tie-breaker. News prefers Sweden/Swedish with English breaking-news fallback and filters Thai news. Temporary VOD read-ahead targets up to 500 MB when heap capacity permits, otherwise scales down; live/unknown streams stay short. No offline/full-video download is promised. Preserves signed in-place updates, SABR recovery, Rumble and sync. Device playback confirmation remains required."
+              --title 'SmartTube Mobile v21 - Fresh Swedish and English news' \
+              --notes 'Fixes the news section stopping at one Swedish video. Collects fresh news from multiple Swedish and English breaking-news publishers, filters old clips, satire and Thai results, deduplicates videos and limits each publisher. Targets up to 24 videos per language as current sources permit. Preserves playback recovery, related-video controls, temporary buffering, Rumble, sync and rollback. Live feed probes and automated tests are recorded in NEWS_FEED_FIX.md; actual device playback remains unverified.'
           fi

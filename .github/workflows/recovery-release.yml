@@ -109,6 +109,14 @@ jobs:
             git -C upstream apply --check ../known-good/pat-sync.patch
             git -C upstream apply ../known-good/pat-sync.patch
           fi
+          if [ -f known-good/news-mediaservice.patch ]; then
+            git -C upstream/MediaServiceCore apply --check ../../known-good/news-mediaservice.patch
+            git -C upstream/MediaServiceCore apply ../../known-good/news-mediaservice.patch
+          fi
+          if [ -f known-good/news.patch ]; then
+            git -C upstream apply --check ../known-good/news.patch
+            git -C upstream apply ../known-good/news.patch
+          fi
           if [ "$RECOVERY_APP" = 'tv' ] && [ -f known-good/tv-player.patch ]; then
             git -C upstream apply --check ../known-good/tv-player.patch
             git -C upstream apply ../known-good/tv-player.patch

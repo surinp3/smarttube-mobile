@@ -1,0 +1,173 @@
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt
+@@ -177,9 +177,10 @@
+     }
+ 
+     fun getNews(): Pair<List<MediaGroup?>?, String?>? {
+-        val swedish = preferredNews(false)
+-        if (!swedish.isNullOrEmpty()) return Pair(swedish, null)
+-        return Pair(preferredNews(true), null)
++        val search = com.liskovsoft.youtubeapi.search.v2.SearchService2()
++        val rows = com.liskovsoft.youtubeapi.common.helpers.PreferredNewsFeed.load(
++            { query, english -> search.getPreferredNewsSearch(query, english) }, System.currentTimeMillis())
++        return Pair(rows, null)
+     }
+ 
+     private fun preferredNews(english: Boolean): List<MediaGroup>? {
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/search/v2/SearchService2.kt b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/search/v2/SearchService2.kt
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/search/v2/SearchService2.kt
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/search/v2/SearchService2.kt
+@@ -20,6 +20,11 @@
+     private val mSearchApi: SearchApi = RetrofitHelper.create(SearchApi::class.java)
+     private val mSearchApi2: SearchApi2 = RetrofitHelper.create(SearchApi2::class.java)
+     private val mAppService = AppService.instance()
++    private companion object {
++        val newsTimeouts = java.util.concurrent.ScheduledThreadPoolExecutor(1) { task ->
++            Thread(task, "news-timeout").apply { isDaemon = true }
++        }.apply { removeOnCancelPolicy = true }
++    }
+ 
+     open fun getSearch(searchText: String?): List<MediaGroup>? {
+         return getSearch(searchText, -1)
+@@ -39,6 +44,20 @@
+         }
+ 
+         return searchResult?.getSections()?.mapNotNull { it?.let { SearchSectionMediaGroup(it) } }
++    }
++
++    fun getPreferredNewsSearch(query: String, english: Boolean): List<MediaGroup>? {
++        val body = com.liskovsoft.youtubeapi.common.helpers.NewsRequestLocale.apply(
++            SearchApiHelper.getSearchQuery(query,
++                com.liskovsoft.youtubeapi.common.helpers.PreferredNewsFeed.SEARCH_OPTIONS), english)
++        val call = mSearchApi.getSearchResult(body, mAppService.visitorData)
++        val cancellation = newsTimeouts.schedule({ call.cancel() }, 6, java.util.concurrent.TimeUnit.SECONDS)
++        // News is deliberately anonymous and locale-scoped, independent of account personalization.
++        return try {
++            RetrofitHelper.get(call, false)?.getSections()?.mapNotNull { it?.let { SearchSectionMediaGroup(it) } }
++        } finally {
++            cancellation.cancel(false)
++        }
+     }
+ 
+     /**
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
+@@ -24,6 +24,11 @@
+         }
+         return swedishPublisher(publisher) || headline.matches(
+                 ".*\\b(sverige|sweden|swedish|stockholm|goteborg|malmo|riksdagen|regeringen|nyheter|nyheten)\\b.*");
++    }
++
++    public static boolean isPublisher(String author, boolean english) {
++        String publisher = normalize(author);
++        return english ? englishPublisher(publisher) : swedishPublisher(publisher);
+     }
+ 
+     public static boolean isNewsTopic(String topic) {
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsFeed.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsFeed.java
+new file mode 100644
+--- /dev/null
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsFeed.java
+@@ -0,0 +1,100 @@
++package com.liskovsoft.youtubeapi.common.helpers;
++
++import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
++import com.liskovsoft.mediaserviceinterfaces.data.MediaItem;
++import com.liskovsoft.youtubeapi.service.data.YouTubeMediaGroup;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.Set;
++
++/** Fill a fresh news selection; a single Swedish result must not suppress every other source. */
++public final class PreferredNewsFeed {
++    // Upstream's sparse filter table returns null for Today|Video|Newest.
++    // This supported Today parameter already includes video type on the wire.
++    public static final int SEARCH_OPTIONS = com.liskovsoft.mediaserviceinterfaces.data.SearchOptions.UPLOAD_DATE_TODAY;
++    public static final int ITEMS_PER_LANGUAGE = 24;
++    public static final int ITEMS_PER_PUBLISHER = 8;
++    public static final long MAX_AGE_MS = 48L * 60 * 60 * 1000;
++    private static final String[] SWEDISH = {"SVT Nyheter", "TV4 Nyheterna", "Aftonbladet nyheter", "Expressen nyheter"};
++    private static final String[] ENGLISH = {"BBC News breaking", "Sky News breaking", "Reuters breaking news"};
++
++    public interface Source {
++        List<MediaGroup> search(String query, boolean english);
++    }
++
++    private PreferredNewsFeed() {}
++
++    public static List<MediaGroup> load(Source source, long now) {
++        List<MediaGroup> result = new ArrayList<>();
++        Set<String> seen = new HashSet<>();
++        long deadline = System.nanoTime() + 25_000_000_000L;
++        for (boolean english : new boolean[] {false, true}) {
++            List<MediaItem> accepted = new ArrayList<>();
++            Map<String, Integer> publishers = new HashMap<>();
++            for (String query : english ? ENGLISH : SWEDISH) {
++                if (accepted.size() >= ITEMS_PER_LANGUAGE || System.nanoTime() >= deadline) break;
++                List<MediaGroup> groups;
++                try { groups = source.search(query, english); }
++                catch (RuntimeException unavailable) { continue; }
++                if (groups == null) continue;
++                for (MediaGroup group : groups) {
++                    if (group == null || group.getMediaItems() == null) continue;
++                    for (MediaItem item : group.getMediaItems()) {
++                        if (accepted.size() >= ITEMS_PER_LANGUAGE) break;
++                        if (!accepts(item, english, now) || seen.contains(item.getVideoId())) continue;
++                        String publisher = publisher(item).toLowerCase(Locale.ROOT);
++                        int count = publishers.containsKey(publisher) ? publishers.get(publisher) : 0;
++                        if (count >= ITEMS_PER_PUBLISHER) continue;
++                        seen.add(item.getVideoId());
++                        publishers.put(publisher, count + 1);
++                        accepted.add(item);
++                    }
++                }
++            }
++            if (!accepted.isEmpty()) {
++                // Search requests all use the supported Today filter. Unknown timestamps are covered
++                // by that server-side filter; explicit old timestamps are still rejected below.
++                java.util.Collections.sort(accepted, (left, right) -> Long.compare(publishedTime(right, now), publishedTime(left, now)));
++                YouTubeMediaGroup row = new YouTubeMediaGroup(MediaGroup.TYPE_NEWS);
++                row.setTitle(english ? "Breaking news in English" : "Swedish news");
++                row.setMediaItems(accepted);
++                row.setNextPageKey(null);
++                result.add(row);
++            }
++        }
++        return result;
++    }
++
++    private static String publisher(MediaItem item) {
++        String author = item.getAuthor();
++        return author == null ? "unknown" : author.split("[\u2022]", 2)[0].trim();
++    }
++
++    private static long publishedTime(MediaItem item, long now) {
++        if (item.getPublishedDate() > 0) return item.getPublishedDate();
++        String metadata = String.valueOf(item.getProductionDate()) + " " + item.getAuthor();
++        metadata = java.text.Normalizer.normalize(metadata, java.text.Normalizer.Form.NFKD)
++                .replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT);
++        java.util.regex.Matcher age = java.util.regex.Pattern.compile(
++                "(\\d+)\\s*(minute|minut|hour|timm|day|dag|week|veck|month|manad|year|ar)").matcher(metadata);
++        if (!age.find()) return -1; // The request itself is still restricted to Today.
++        long count = Long.parseLong(age.group(1));
++        String unit = age.group(2);
++        if (unit.equals("week") || unit.equals("veck") || unit.equals("month") || unit.equals("manad") ||
++                unit.equals("year") || unit.equals("ar")) return now - MAX_AGE_MS - 1;
++        long duration = unit.equals("day") || unit.equals("dag") ? 24*60*60*1000L :
++                unit.equals("hour") || unit.equals("timm") ? 60*60*1000L : 60*1000L;
++        return now - count * duration;
++    }
++
++    private static boolean accepts(MediaItem item, boolean english, long now) {
++        if (item == null || !PreferredNewsPolicy.isPublisher(publisher(item), english) || item.getVideoId() == null || item.getVideoId().isEmpty() || item.isUpcoming()) return false;
++        long published = publishedTime(item, now);
++        if (published > 0 && (published < now - MAX_AGE_MS || published > now + 60 * 60 * 1000)) return false;
++        return PreferredNewsPolicy.accepts(item.getTitle(), publisher(item), english ? "Breaking news" : "Swedish news", english);
++    }
++}
