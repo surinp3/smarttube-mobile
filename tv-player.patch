@@ -1,7 +1,7 @@
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
 --- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
 +++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
-@@ -40,6 +40,45 @@
+@@ -40,6 +40,46 @@
              return Boolean.compare(sameChannel(current, right), sameChannel(current, left));
          });
          return result;
@@ -33,8 +33,9 @@ diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/Rel
 +        for (String term : subject) if (other.contains(term) && term.length() >= 3) overlap++;
 +        // Requiring a word from the final third erased relevant titles with different word order.
 +        // Partial matches remain below strong matches; publisher alone never qualifies.
-+        if (overlap < 2 && !(subject.size() <= 3 && overlap == 1 &&
-+                subject.stream().anyMatch(term -> term.length() >= 4 && other.contains(term)))) return 0;
++        boolean specificTerm = false;
++        for (String term : subject) if (term.length() >= 4 && other.contains(term)) specificTerm = true;
++        if (overlap < 2 && !(subject.size() <= 3 && overlap == 1 && specificTerm)) return 0;
 +        if (subject.size() >= 4) {
 +            List<String> ordered = new ArrayList<>(subject);
 +            boolean topic = false;
