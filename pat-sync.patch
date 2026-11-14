@@ -3852,7 +3852,7 @@ index bb8e1f210..943ff3fd6 100644
          return mTitle;
      }
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
-index 8627fae7c..049991f75 100644
+index 8627fae7c..b63dbd701 100644
 --- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
 +++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
 @@ -11,6 +11,7 @@ import com.liskovsoft.mediaserviceinterfaces.data.ChapterItem;
@@ -3984,7 +3984,7 @@ index 8627fae7c..049991f75 100644
  
 +                // Explicit playlist/queue order remains user-controlled. Other
 +                // rows must have subject evidence before channel can break ties.
-+                if (!(groupIndex == 0 && video.hasPlaylist())) {
++                if (!isPlaylistSuggestion(video, groupIndex)) {
 +                    videoGroup.rankRelated(video);
 +                    relatedCount += videoGroup.getSize();
 +                    relatedGroups.add(videoGroup);
@@ -3994,7 +3994,7 @@ index 8627fae7c..049991f75 100644
                  if (TextUtils.isEmpty(videoGroup.getTitle())) {
                      videoGroup.setTitle(getContext().getString(R.string.suggestions));
                      if (getPlayerTweaksData().isSuggestionsHorizontallyScrolled()) {
-@@ -425,6 +464,46 @@ public class SuggestionsController extends BasePlayerController {
+@@ -425,6 +464,52 @@ public class SuggestionsController extends BasePlayerController {
                  }
              }
          }
@@ -4038,10 +4038,16 @@ index 8627fae7c..049991f75 100644
 +    private boolean isCurrentSuggestion(int generation, String videoId) {
 +        return generation == mSuggestionGeneration && getPlayer() != null && getVideo() != null &&
 +                Helpers.equals(videoId, getVideo().videoId);
++    }
++
++    private boolean isPlaylistSuggestion(Video video, int groupIndex) {
++        // The cast queue was already extracted above; its remaining first row
++        // contains recommendations, even when the current video has a playlist ID.
++        return groupIndex == 0 && video.hasPlaylist() && !(video.isRemote && video.remotePlaylistId != null);
      }
  
      /**
-@@ -652,7 +731,9 @@ public class SuggestionsController extends BasePlayerController {
+@@ -652,7 +737,9 @@ public class SuggestionsController extends BasePlayerController {
              return;
          }
  

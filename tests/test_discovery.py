@@ -21,8 +21,9 @@ class DiscoveryTest(unittest.TestCase):
         video = cls.root / "Video.java"
         video.write_text('''package com.liskovsoft.smartyoutubetv2.common.app.models.data;
 public class Video {
-    public String videoId, title, author, channelId, playlistId;
-    public boolean isChapter, isUpcoming, isUnplayable;
+    public String videoId, title, author, channelId, playlistId, remotePlaylistId;
+    public boolean isChapter, isUpcoming, isUnplayable, isRemote;
+    public boolean hasPlaylist() { return playlistId != null; }
     public String getTitle() { return title; }
     public String getAuthor() { return author; }
 }''')
@@ -60,7 +61,7 @@ public class Video {
         source = (Path(SOURCE) / "common/src/main/java/com/liskovsoft/smartyoutubetv2/"
                   "common/app/models/playback/controllers/SuggestionsController.java").read_text()
         production = method(source, "public void onNewVideo(Video video)") + "\n" + method(
-            source, "private boolean isCurrentSuggestion(")
+            source, "private boolean isCurrentSuggestion(") + "\n" + method(source, "private boolean isPlaylistSuggestion(")
         code = '''import java.util.Objects;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 public class SuggestionContextFixture {
@@ -87,6 +88,10 @@ public class SuggestionContextFixture {
         check(!f.isCurrentSuggestion(old,"A"));
         check(f.isCurrentSuggestion(f.mSuggestionGeneration,"A"));
         f.player=null; check(!f.isCurrentSuggestion(f.mSuggestionGeneration,"A"));
+        a.playlistId="PL-explicit";
+        check(f.isPlaylistSuggestion(a,0)); check(!f.isPlaylistSuggestion(a,1));
+        a.isRemote=true; a.remotePlaylistId="PL-cast";
+        check(!f.isPlaylistSuggestion(a,0));
         System.out.println("PASS context");
     }
 }'''

@@ -15,7 +15,7 @@ best subject match. Sparse results get one title-subject search, which passes
 the same relevance filter. There is no generic trending/live fallback.
 
 Each new video clears stale rows. Generation checks reject late metadata,
-continuation and search callbacks, including switching A → B → A. Continuation
+continuation and search callbacks, including switching A → B → A. Cast queues are extracted before the remaining recommendation rows are ranked. Continuation
 results are filtered again and replace the ranked row; repeated cursor tokens
 are blocked and automatic page filling is bounded. Explicit playlists, playback
 queues, chapters, child mode and disabled suggestions keep their existing rules.
