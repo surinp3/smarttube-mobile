@@ -144,3 +144,179 @@ index 29e7de1e..a0a38266 100644
              VideoInfo result = getVideoInfoWithRentFix(nextClient, videoId, clickTrackingParams);
  
              if (result != null && infoTester.test(result)) {
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseApiHelper.kt b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseApiHelper.kt
+index 6b5d2973..81092a76 100644
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseApiHelper.kt
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseApiHelper.kt
+@@ -142,6 +142,18 @@ internal object BrowseApiHelper {
+         return PostDataHelper.createQuery(client.browseTemplate, NEWS)
+     }
+ 
++    fun getPreferredNewsQuery(client: AppClient, english: Boolean): String {
++        val query = QueryBuilder(client)
++            .setType(PostDataType.Browse)
++            .setBrowseId("FEtopics_news")
++            .setLanguage(if (english) com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.ENGLISH_LANGUAGE
++                else com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.SWEDISH_LANGUAGE)
++            .setCountry(if (english) com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.ENGLISH_COUNTRY
++                else com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.SWEDISH_COUNTRY)
++            .build()
++        return com.liskovsoft.youtubeapi.common.helpers.NewsRequestLocale.apply(query, english)
++    }
++
+     fun getGamingQuery(client: AppClient): String {
+         return PostDataHelper.createQuery(client.browseTemplate, GAMING)
+     }
+@@ -214,4 +226,4 @@ internal object BrowseApiHelper {
+             .setParams(params)
+             .build()
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt
+index ad4bafae..2b8126ed 100644
+--- a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/browse/v2/BrowseService2.kt
+@@ -4,6 +4,8 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup
+ import com.liskovsoft.mediaserviceinterfaces.data.MediaItem
+ import com.liskovsoft.youtubeapi.browse.v2.gen.*
+ import com.liskovsoft.youtubeapi.common.helpers.AppClient
++import com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy
++import com.liskovsoft.youtubeapi.service.data.YouTubeMediaGroup
+ import com.liskovsoft.youtubeapi.common.models.impl.mediagroup.*
+ import com.liskovsoft.googlecommon.common.helpers.RetrofitHelper
+ import com.liskovsoft.youtubeapi.common.helpers.PostDataHelper
+@@ -175,7 +177,27 @@ internal open class BrowseService2 {
+     }
+ 
+     fun getNews(): Pair<List<MediaGroup?>?, String?>? {
+-        return getBrowseRowsTV(BrowseApiHelper::getNewsQuery, MediaGroup.TYPE_NEWS)
++        val swedish = preferredNews(false)
++        if (!swedish.isNullOrEmpty()) return Pair(swedish, null)
++        return Pair(preferredNews(true), null)
++    }
++
++    private fun preferredNews(english: Boolean): List<MediaGroup>? {
++        return try {
++            val rows = getBrowseRowsTV({ BrowseApiHelper.getPreferredNewsQuery(it, english) }, MediaGroup.TYPE_NEWS)?.first
++            rows?.mapNotNull { row ->
++                val items = row?.mediaItems?.filter { item -> item != null && !item.videoId.isNullOrEmpty() &&
++                    PreferredNewsPolicy.accepts(item.title, item.author, row?.title, english) }
++                if (items.isNullOrEmpty()) null else YouTubeMediaGroup(MediaGroup.TYPE_NEWS).apply {
++                    title = if (english) "Breaking news in English" else "Swedish news"
++                    mediaItems = items
++                    // Do not continue with a token that would restore the device locale.
++                    nextPageKey = null
++                }
++            }
++        } catch (error: IllegalStateException) {
++            null // Try the explicit English fallback, never the device-local news feed.
++        }
+     }
+ 
+     fun getGaming(): Pair<List<MediaGroup?>?, String?>? {
+@@ -612,4 +634,4 @@ internal open class BrowseService2 {
+ 
+         return Pair(combinedItems, combinedKey)
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/NewsRequestLocale.kt b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/NewsRequestLocale.kt
+new file mode 100644
+index 00000000..e1a94ede
+--- /dev/null
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/NewsRequestLocale.kt
+@@ -0,0 +1,15 @@
++package com.liskovsoft.youtubeapi.common.helpers
++
++import org.json.JSONObject
++
++internal object NewsRequestLocale {
++    fun apply(query: String, english: Boolean): String {
++        val result = JSONObject(query)
++        val client = result.getJSONObject("context").getJSONObject("client")
++        val language = if (english) PreferredNewsPolicy.ENGLISH_LANGUAGE else PreferredNewsPolicy.SWEDISH_LANGUAGE
++        val country = if (english) PreferredNewsPolicy.ENGLISH_COUNTRY else PreferredNewsPolicy.SWEDISH_COUNTRY
++        client.put("hl", language).put("gl", country)
++            .put("acceptLanguage", language).put("acceptRegion", country)
++        return result.toString()
++    }
++}
+diff --git a/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
+new file mode 100644
+index 00000000..e9358c0d
+--- /dev/null
++++ b/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/common/helpers/PreferredNewsPolicy.java
+@@ -0,0 +1,70 @@
++package com.liskovsoft.youtubeapi.common.helpers;
++
++import java.text.Normalizer;
++import java.util.Locale;
++
++/** Explicit news preferences, independent of the device or account region. */
++public final class PreferredNewsPolicy {
++    public static final String SWEDISH_LANGUAGE = "sv";
++    public static final String SWEDISH_COUNTRY = "SE";
++    public static final String ENGLISH_LANGUAGE = "en";
++    public static final String ENGLISH_COUNTRY = "GB";
++    public static final String RUMBLE_QUERY = "breaking news";
++
++    private PreferredNewsPolicy() {}
++
++    public static boolean accepts(String title, String author, String row, boolean englishFallback) {
++        if (title == null || title.trim().isEmpty() || hasThai(title) || hasThai(author)) return false;
++        String headline = normalize(title);
++        String publisher = normalize(author);
++        if (englishFallback) {
++            boolean breaking = (" " + headline + " ").contains(" breaking ") || normalize(row).contains("breaking");
++            if (!breaking || !isLatinText(title)) return false;
++            return englishPublisher(publisher) || headline.matches(".*\\b(news|the|after|with|from|report|reports|says|over|as|is|in|on|of)\\b.*");
++        }
++        return swedishPublisher(publisher) || headline.matches(
++                ".*\\b(sverige|sweden|swedish|stockholm|goteborg|malmo|riksdagen|regeringen|nyheter|nyheten)\\b.*");
++    }
++
++    public static boolean isNewsTopic(String topic) {
++        String text = normalize(topic);
++        return text.contains("news") || text.contains("nyheter") || text.contains("nytt");
++    }
++
++    private static boolean swedishPublisher(String value) {
++        return value.equals("svt") || value.startsWith("svt nyheter") || value.startsWith("tv4") ||
++                value.startsWith("nyhetsmorgon") || value.startsWith("sveriges radio") ||
++                value.equals("ekot") || value.startsWith("aftonbladet") || value.startsWith("expressen") ||
++                value.startsWith("dagens nyheter");
++    }
++
++    private static boolean englishPublisher(String value) {
++        return value.equals("bbc news") || value.equals("sky news") || value.equals("reuters") ||
++                value.equals("associated press") || value.equals("ap news") || value.equals("dw news") ||
++                value.equals("france 24 english") || value.equals("al jazeera english") ||
++                value.equals("nbc news") || value.equals("abc news") || value.equals("cbs news");
++    }
++
++    private static boolean hasThai(String value) {
++        if (value == null) return false;
++        for (int i = 0; i < value.length(); i++)
++            if (value.charAt(i) >= '\u0e00' && value.charAt(i) <= '\u0e7f') return true;
++        return false;
++    }
++
++    private static boolean isLatinText(String value) {
++        for (int i = 0; i < value.length(); i++) {
++            char letter = value.charAt(i);
++            if (Character.isLetter(letter) && Character.UnicodeBlock.of(letter) != Character.UnicodeBlock.BASIC_LATIN &&
++                    Character.UnicodeBlock.of(letter) != Character.UnicodeBlock.LATIN_1_SUPPLEMENT &&
++                    Character.UnicodeBlock.of(letter) != Character.UnicodeBlock.LATIN_EXTENDED_A) return false;
++        }
++        return true;
++    }
++
++    private static String normalize(String value) {
++        return value == null ? "" : Normalizer.normalize(value, Normalizer.Form.NFKD)
++                .replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT)
++                .replaceAll("[^\\p{L}\\p{N}]+", " ").trim();
++    }
++}

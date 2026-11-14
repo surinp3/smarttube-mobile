@@ -51,36 +51,6 @@ index 4369d0d..44c382d 100644
              mVideoLoaderController.reloadVideo();
          }
      }
-diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
-index 0111d8c..ffe8fc1 100644
---- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
-+++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
-@@ -109,8 +109,8 @@ public class ExoPlayerInitializer {
-         // Default values
-         int minBufferMs = 30_000;
-         int maxBufferMs = 30_000;
--        int bufferForPlaybackMs = 2_500;
--        int bufferForPlaybackAfterRebufferMs = 5_000;
-+        int bufferForPlaybackMs = 3_000;
-+        int bufferForPlaybackAfterRebufferMs = 7_000;
- 
-         switch (mPlayerData.getVideoBufferType()) {
-             case PlayerData.BUFFER_HIGHEST:
-@@ -128,8 +128,12 @@ public class ExoPlayerInitializer {
-                 baseBuilder.setBackBuffer(minBufferMs, true);
-                 break;
-             case PlayerData.BUFFER_MEDIUM:
--                //minBufferMs = 30_000;
--                //maxBufferMs = 30_000;
-+                // This TV edition trades a little extra RAM for more headroom
-+                // when the CDN or Wi-Fi briefly stops delivering segments.
-+                // Keep the live/low-buffer profile below unchanged.
-+                minBufferMs = 40_000;
-+                maxBufferMs = 75_000;
-+                baseBuilder.setTargetBufferBytes(Math.min(mMaxBufferBytes, 120_000_000));
-                 break;
-             case PlayerData.BUFFER_LOW:
-                 minBufferMs = 5_000; // LIVE fix
 diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java
 index 8bb39b8..dd145f9 100644
 --- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/BufferingDetector.java
@@ -101,15 +71,15 @@ index 51c0242..caa704c 100644
 --- a/smarttubetv/build.gradle
 +++ b/smarttubetv/build.gradle
 @@ -185,6 +185,14 @@ android {
-             versionNameSuffix "-mobile.19"
+             versionNameSuffix "-mobile.20"
              matchingFallbacks = ['ststable']
          }
 +        stpattv {
 +            applicationId "app.smarttube.pattv"
 +            minSdkVersion 23
 +            targetSdkVersion project.properties.compileSdkVersion
-+            versionCode 3012
-+            versionNameSuffix "-tv.12"
++            versionCode 3013
++            versionNameSuffix "-tv.13"
 +            matchingFallbacks = ['ststable']
 +        }
      }

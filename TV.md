@@ -5,10 +5,11 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - Install package: `app.smarttube.pattv`. Google TV Streamer can run 32-bit Android apps even when its CPU is 64-bit; use the ARMv7 APK if the ARM64 APK reports `INSTALL_FAILED_NO_MATCHING_ABIS`, or the universal APK for either ARM architecture.
 - Upstream source and MediaServiceCore revisions are pinned for reproducible builds.
 - Prefers the downgraded TV client, which is capable of direct streams, with the original TV and other clients preserved as fallbacks. YouTube may change which clients are functional.
-- Larger 40–75 second buffer for the medium-buffer profile, 3-second start and 7-second rebuffer target. Low-buffer mode remains available for low-latency live viewing.
+- Adaptive temporary VOD read-ahead up to ten minutes or a memory-safe target up to 500 MB, with 3-second start and 7-second rebuffer targets. Live/unknown streams stop at 30 seconds; low-buffer mode keeps five seconds. No offline/full-video download is promised.
 - After 12 seconds of cumulative buffering within a minute, TV VOD playback tries another client rather than blindly reloading the same one. SABR reload-token fixes from the pinned upstream revision remain in place.
 - Never silently changes a user's DNS preference to Google DNS during stall recovery.
-- Separate signed `tv-v12` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- Separate signed `tv-v13` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- Player suggestions rank by watched subject first and channel second. News requests prefer Swedish/Sweden coverage, with English breaking news as a fallback. See [behavior and validation](DISCOVERY_AND_BUFFERING.md).
 - **Follow on Rumble** in the YouTube player controls looks up the creator.
   Choose a channel to save it to your synced SmartTube follows.
 - The main sidebar opens **YouTube**, **Rumble** or **Both**. **Both** mixes

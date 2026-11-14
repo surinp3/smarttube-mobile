@@ -2000,7 +2000,7 @@ index ee6b2ce4d..63c12b706 100644
      private static final int SECONDARY = Color.rgb(170, 170, 170);
      private static final int ACCENT = Color.rgb(255, 35, 35);
 -    private static final int MOBILE_VERSION = 13;
-+    private static final int MOBILE_VERSION = 19;
++    private static final int MOBILE_VERSION = 20;
 +    private static final int HOME_PAGE_SIZE = 19;
      private static final String MOBILE_PREFERENCES = "smarttube_mobile";
      private static final String HIDE_HOME_SHORTS = "hide_home_shorts";
@@ -3824,3 +3824,796 @@ index 000000000..950b59529
 +    <string name="pat_video_source_rumble" translatable="false">Rumble</string>
 +    <string name="pat_show_more_recent">Show more</string>
 +</resources>
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java
+index bb8e1f210..943ff3fd6 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/data/VideoGroup.java
+@@ -41,6 +41,8 @@ public class VideoGroup {
+     private int mAction = ACTION_APPEND;
+     private int mType = -1;
+     public boolean isQueue;
++    public boolean isRelatedSuggestions;
++    public String lastRelatedContinuationKey;
+ 
+     public static VideoGroup from(BrowseSection section) {
+         return from((MediaGroup) null, section);
+@@ -190,6 +192,13 @@ public class VideoGroup {
+         return Collections.unmodifiableList(mVideos);
+     }
+ 
++    public void rankRelated(Video current) {
++        isRelatedSuggestions = true;
++        mVideos = com.liskovsoft.smartyoutubetv2.common.misc.RelatedVideoRanker.rank(current, mVideos);
++        // A continuation may contain better matches than the first page.
++        mAction = ACTION_REPLACE;
++    }
++
+     public String getTitle() {
+         return mTitle;
+     }
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
+index 8627fae7c..049991f75 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/SuggestionsController.java
+@@ -11,6 +11,7 @@ import com.liskovsoft.mediaserviceinterfaces.data.ChapterItem;
+ import com.liskovsoft.mediaserviceinterfaces.data.DislikeData;
+ import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
+ import com.liskovsoft.mediaserviceinterfaces.data.MediaItemMetadata;
++import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions;
+ import com.liskovsoft.sharedutils.helpers.Helpers;
+ import com.liskovsoft.sharedutils.helpers.MessageHelpers;
+ import com.liskovsoft.sharedutils.mylogger.Log;
+@@ -28,6 +29,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
+ import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
+ import com.liskovsoft.smartyoutubetv2.common.misc.BrowseProcessorManager;
+ import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
++import com.liskovsoft.smartyoutubetv2.common.misc.RelatedVideoRanker;
+ import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
+ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+ import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
+@@ -46,6 +48,9 @@ public class SuggestionsController extends BasePlayerController {
+     private Video mNextSectionVideo;
+     private int mFocusCount;
+     private int mNextRetryCount;
++    private int mSuggestionGeneration;
++    private int mRelatedAutoPages;
++    private String mSuggestionsVideoId;
+     private List<ChapterItem> mChapters;
+     private final Runnable mChapterHandler = this::startChapterNotificationServiceIfNeededInt;
+     private static final int MAX_PLAYLIST_CONTINUATIONS = 20;
+@@ -71,6 +76,10 @@ public class SuggestionsController extends BasePlayerController {
+         // Remote control fix. Slow network fix. Suggestions may still be loading.
+         // This could lead to changing current video info (title, id etc) to wrong one.
+         disposeActions();
++        mSuggestionGeneration++;
++        mRelatedAutoPages = 0;
++        if (getPlayer() != null && (video == null || !Helpers.equals(video.videoId, mSuggestionsVideoId)))
++            getPlayer().clearSuggestions();
+         //mCurrentGroup = video.getGroup(); // disable garbage collected
+         //appendNextSectionVideoIfNeeded(video); // ConcurrentModificationException error
+     }
+@@ -91,11 +100,13 @@ public class SuggestionsController extends BasePlayerController {
+ 
+     @Override
+     public void onEngineReleased() {
++        mSuggestionGeneration++;
+         disposeActions();
+     }
+ 
+     @Override
+     public void onFinish() {
++        mSuggestionGeneration++;
+         disposeActions();
+     }
+ 
+@@ -185,13 +196,24 @@ public class SuggestionsController extends BasePlayerController {
+         }
+ 
+         MediaGroup mediaGroup = group.getMediaGroup();
++        final int generation = mSuggestionGeneration;
++        if (group.isRelatedSuggestions) {
++            String key = group.getNextPageKey();
++            if (key == null || key.equals(group.lastRelatedContinuationKey)) {
++                getPlayer().showProgressBar(false);
++                return;
++            }
++            group.lastRelatedContinuationKey = key;
++        }
+ 
+         Disposable continueAction = mContentService.continueGroupObserve(mediaGroup)
+                 .subscribe(
+                         continueMediaGroup -> {
++                            if (!isCurrentSuggestion(generation, getVideo() != null ? getVideo().videoId : null)) return;
+                             getPlayer().showProgressBar(false);
+ 
+                             VideoGroup videoGroup = VideoGroup.from(group, continueMediaGroup);
++                            if (videoGroup.isRelatedSuggestions) videoGroup.rankRelated(getVideo());
+                             getPlayer().updateSuggestions(videoGroup);
+                             mBrowseProcessor.process(videoGroup);
+ 
+@@ -205,6 +227,7 @@ public class SuggestionsController extends BasePlayerController {
+                         },
+                         error -> {
+                             Log.e(TAG, "continueGroup error: %s", error.getMessage());
++                            if (group.isRelatedSuggestions) group.lastRelatedContinuationKey = null;
+                             if (getPlayer() != null) {
+                                 getPlayer().showProgressBar(false);
+                             }
+@@ -255,9 +278,13 @@ public class SuggestionsController extends BasePlayerController {
+         // Video might be loaded from Channels section (has playlistParams)
+         observable = mMediaItemService.getMetadataObserve(video.videoId, video.getPlaylistId(), video.playlistIndex, video.playlistParams);
+ 
++        final int generation = mSuggestionGeneration;
+         Disposable metadataAction = observable
+                 .subscribe(
+-                        callback::onMetadata,
++                        metadata -> {
++                            if (isCurrentSuggestion(generation, video.videoId))
++                                callback.onMetadata(metadata);
++                        },
+                         error -> {
+                             // Usual errors here is something with title parsing
+                             String message = error.getMessage();
+@@ -365,12 +392,13 @@ public class SuggestionsController extends BasePlayerController {
+             return;
+         }
+ 
+-        if (!video.isRemote && getPlayer().isSuggestionsShown()) {
++        if (!video.isRemote && getPlayer().isSuggestionsShown() && Helpers.equals(video.videoId, mSuggestionsVideoId)) {
+             Log.d(TAG, "Suggestions is opened. Seems that user want to stay here.");
+             return;
+         }
+ 
+         getPlayer().clearSuggestions(); // clear previous videos
++        mSuggestionsVideoId = video.videoId;
+ 
+         appendChaptersIfNeeded(mediaItemMetadata);
+ 
+@@ -388,6 +416,8 @@ public class SuggestionsController extends BasePlayerController {
+ 
+         int groupIndex = -1;
+         int suggestRows = -1;
++        List<VideoGroup> relatedGroups = new ArrayList<>();
++        int relatedCount = 0;
+ 
+         if (GeneralData.instance(getContext()).isChildModeEnabled() || getPlayerTweaksData().isSuggestionsDisabled()) {
+             suggestRows = video.hasPlaylist() ? 1 : 0;
+@@ -408,6 +438,15 @@ public class SuggestionsController extends BasePlayerController {
+             if (group != null && !group.isEmpty()) {
+                 VideoGroup videoGroup = VideoGroup.from(group);
+ 
++                // Explicit playlist/queue order remains user-controlled. Other
++                // rows must have subject evidence before channel can break ties.
++                if (!(groupIndex == 0 && video.hasPlaylist())) {
++                    videoGroup.rankRelated(video);
++                    relatedCount += videoGroup.getSize();
++                    relatedGroups.add(videoGroup);
++                    continue;
++                }
++
+                 if (TextUtils.isEmpty(videoGroup.getTitle())) {
+                     videoGroup.setTitle(getContext().getString(R.string.suggestions));
+                     if (getPlayerTweaksData().isSuggestionsHorizontallyScrolled()) {
+@@ -425,6 +464,46 @@ public class SuggestionsController extends BasePlayerController {
+                 }
+             }
+         }
++
++        java.util.Collections.sort(relatedGroups, (left, right) -> Integer.compare(
++                RelatedVideoRanker.bestScore(video, right.getVideos()),
++                RelatedVideoRanker.bestScore(video, left.getVideos())));
++        for (VideoGroup group : relatedGroups) {
++            if (TextUtils.isEmpty(group.getTitle())) group.setTitle(getContext().getString(R.string.suggestions));
++            if (!group.isEmpty()) {
++                getPlayer().updateSuggestions(group);
++                mBrowseProcessor.process(group);
++            }
++            continueGroupIfNeeded(group);
++        }
++        if (suggestRows < 0 && relatedCount < 6) loadSubjectSuggestions(video);
++    }
++
++    private void loadSubjectSuggestions(Video current) {
++        String query = RelatedVideoRanker.subjectQuery(current);
++        if (query == null) return;
++        final int generation = mSuggestionGeneration;
++        Disposable search = mContentService.getSearchObserve(query, SearchOptions.TYPE_VIDEO)
++                .subscribe(groups -> {
++                    if (!isCurrentSuggestion(generation, current.videoId)) return;
++                    List<Video> candidates = new ArrayList<>();
++                    if (groups != null) for (MediaGroup group : groups) {
++                        if (group != null) candidates.addAll(VideoGroup.from(group).getVideos());
++                    }
++                    VideoGroup related = VideoGroup.from(RelatedVideoRanker.rank(current, candidates));
++                    if (related.isEmpty()) return;
++                    related.setTitle("More on this subject");
++                    related.setId((current.videoId + ":subject").hashCode());
++                    related.setType(MediaGroup.TYPE_SUGGESTIONS);
++                    getPlayer().updateSuggestions(related);
++                    mBrowseProcessor.process(related);
++                }, error -> Log.d(TAG, "Subject suggestions unavailable"));
++        mActions.add(search);
++    }
++
++    private boolean isCurrentSuggestion(int generation, String videoId) {
++        return generation == mSuggestionGeneration && getPlayer() != null && getVideo() != null &&
++                Helpers.equals(videoId, getVideo().videoId);
+     }
+ 
+     /**
+@@ -652,7 +731,9 @@ public class SuggestionsController extends BasePlayerController {
+             return;
+         }
+ 
++        if (group.isRelatedSuggestions && mRelatedAutoPages >= 3) return;
+         if (MediaServiceManager.instance().shouldContinueRowGroup(getContext(), group)) {
++            if (group.isRelatedSuggestions) mRelatedAutoPages++;
+             continueGroup(group, getPlayer().isSuggestionsShown());
+         }
+     }
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
+index 0111d8ce9..28be6bcc2 100644
+--- a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/ExoPlayerInitializer.java
+@@ -6,6 +6,7 @@ import android.os.Handler;
+ import androidx.annotation.Nullable;
+ import com.google.android.exoplayer2.C;
+ import com.google.android.exoplayer2.DefaultLoadControl;
++import com.google.android.exoplayer2.LoadControl;
+ import com.google.android.exoplayer2.DefaultRenderersFactory;
+ import com.google.android.exoplayer2.ExoPlayerFactory;
+ import com.google.android.exoplayer2.SeekParameters;
+@@ -49,7 +50,7 @@ public class ExoPlayerInitializer {
+     }
+ 
+     public SimpleExoPlayer createPlayer(Context context, DefaultRenderersFactory renderersFactory, DefaultTrackSelector trackSelector) {
+-        DefaultLoadControl loadControl = createLoadControl();
++        LoadControl loadControl = createLoadControl();
+ 
+         // HDR fix?
+         //trackSelector.setParameters(trackSelector.buildUponParameters().setTunnelingAudioSessionId(C.generateAudioSessionIdV21(context)));
+@@ -71,6 +72,8 @@ public class ExoPlayerInitializer {
+         // Fix still image while audio is playing (happens after format change or exit from sleep)
+         //player.setPlayWhenReady(true);
+ 
++        if (loadControl instanceof SessionLoadControl) player.addListener((SessionLoadControl) loadControl);
++
+         applyPlaybackFixes(player);
+ 
+         setupAudioFocus(player);
+@@ -97,55 +100,12 @@ public class ExoPlayerInitializer {
+      * Increase player's min/max buffer size to 60 secs
+      * @return load control
+      */
+-    private DefaultLoadControl createLoadControl() {
+-        DefaultLoadControl.Builder baseBuilder = new DefaultLoadControl.Builder();
+-
+-        // Default values
+-        //DefaultLoadControl.DEFAULT_MIN_BUFFER_MS // 15_000
+-        //DefaultLoadControl.DEFAULT_MAX_BUFFER_MS // 50_000
+-        //DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS // 2_500
+-        //DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS // 5_000
+-
+-        // Default values
+-        int minBufferMs = 30_000;
+-        int maxBufferMs = 30_000;
+-        int bufferForPlaybackMs = 2_500;
+-        int bufferForPlaybackAfterRebufferMs = 5_000;
+-
+-        switch (mPlayerData.getVideoBufferType()) {
+-            case PlayerData.BUFFER_HIGHEST:
+-                minBufferMs = 50_000;
+-                maxBufferMs = 100_000;
+-                // Infinite buffer works awfully on live streams. Constant stuttering.
+-                //maxBufferMs = 36_000_000; // technical infinity, recommended here a very high number, the max will be based on setTargetBufferBytes() value
+-                baseBuilder
+-                        .setTargetBufferBytes(mMaxBufferBytes);
+-                baseBuilder.setBackBuffer(minBufferMs, true);
+-                break;
+-            case PlayerData.BUFFER_HIGH:
+-                minBufferMs = 50_000;
+-                maxBufferMs = 50_000;
+-                baseBuilder.setBackBuffer(minBufferMs, true);
+-                break;
+-            case PlayerData.BUFFER_MEDIUM:
+-                //minBufferMs = 30_000;
+-                //maxBufferMs = 30_000;
+-                break;
+-            case PlayerData.BUFFER_LOW:
+-                minBufferMs = 5_000; // LIVE fix
+-                maxBufferMs = 5_000; // LIVE fix
+-                //bufferForPlaybackMs = 1_000;
+-                //bufferForPlaybackAfterRebufferMs = 1_000;
+-                break;
++    private LoadControl createLoadControl() {
++        if (mPlayerData.getVideoBufferType() == PlayerData.BUFFER_LOW) {
++            return new DefaultLoadControl.Builder()
++                    .setBufferDurationsMs(5_000, 5_000, 2_500, 5_000).createDefaultLoadControl();
+         }
+-
+-        baseBuilder
+-                .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs);
+-
+-        // Decrease buffer size?
+-        //baseBuilder.setAllocator(new DefaultAllocator(true, 16 * 1024));
+-
+-        return baseBuilder.createDefaultLoadControl();
++        return new SessionLoadControl(mMaxBufferBytes);
+     }
+ 
+     private void setupVolumeBoost(SimpleExoPlayer player) {
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControl.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControl.java
+new file mode 100644
+index 000000000..7a6b6034e
+--- /dev/null
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControl.java
+@@ -0,0 +1,59 @@
++package com.liskovsoft.smartyoutubetv2.common.exoplayer.other;
++
++import com.google.android.exoplayer2.C;
++import com.google.android.exoplayer2.DefaultLoadControl;
++import com.google.android.exoplayer2.LoadControl;
++import com.google.android.exoplayer2.Player;
++import com.google.android.exoplayer2.Renderer;
++import com.google.android.exoplayer2.Timeline;
++import com.google.android.exoplayer2.source.TrackGroupArray;
++import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
++import com.google.android.exoplayer2.upstream.Allocator;
++import com.google.android.exoplayer2.upstream.DefaultAllocator;
++
++/** Temporary encoded-media read-ahead, not a persistent or full-video download. */
++public final class SessionLoadControl implements LoadControl, Player.EventListener {
++    private final DefaultAllocator allocator = new DefaultAllocator(true, 65_536);
++    private final DefaultLoadControl delegate;
++    private boolean liveOrUnknown = true;
++
++    public SessionLoadControl(long physicalLimit) {
++        Runtime runtime = Runtime.getRuntime();
++        int bytes = TemporaryBufferPolicy.budget(runtime.maxMemory(), runtime.totalMemory(), runtime.freeMemory(), physicalLimit);
++        delegate = new DefaultLoadControl.Builder().setAllocator(allocator)
++                .setTargetBufferBytes(bytes).setPrioritizeTimeOverSizeThresholds(false)
++                .setBufferDurationsMs(30_000, TemporaryBufferPolicy.VOD_MAX_MS, 3_000, 7_000)
++                .setBackBuffer(0, false).createDefaultLoadControl();
++    }
++
++    @Override public void onPrepared() {
++        liveOrUnknown = true;
++        allocator.reset();
++        delegate.onPrepared();
++    }
++    @Override public void onTracksSelected(Renderer[] renderers, TrackGroupArray groups, TrackSelectionArray tracks) {
++        delegate.onTracksSelected(renderers, groups, tracks);
++    }
++    @Override public void onStopped() { delegate.onStopped(); }
++    @Override public void onReleased() { delegate.onReleased(); }
++    @Override public Allocator getAllocator() { return allocator; }
++    @Override public long getBackBufferDurationUs() { return 0; }
++    @Override public boolean retainBackBufferFromKeyframe() { return false; }
++    @Override public boolean shouldContinueLoading(long bufferedUs, float speed) {
++        if (liveOrUnknown && bufferedUs >= TemporaryBufferPolicy.LIVE_MAX_US) return false;
++        return delegate.shouldContinueLoading(bufferedUs, speed);
++    }
++    @Override public boolean shouldStartPlayback(long bufferedUs, float speed, boolean rebuffering) {
++        return delegate.shouldStartPlayback(bufferedUs, speed, rebuffering);
++    }
++    @Override public void onTimelineChanged(Timeline timeline, Object manifest, int reason) {
++        if (timeline.isEmpty()) { liveOrUnknown = true; return; }
++        Timeline.Window window = timeline.getWindow(0, new Timeline.Window());
++        liveOrUnknown = window.isDynamic || window.durationUs == C.TIME_UNSET;
++    }
++    @Override public void onPlayerStateChanged(boolean playWhenReady, int state) {
++        // Consumed samples are discarded, and completion frees the unused pool.
++        // stop/release also reset it through DefaultLoadControl. No files are written.
++        if (state == Player.STATE_ENDED || state == Player.STATE_IDLE) allocator.reset();
++    }
++}
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/TemporaryBufferPolicy.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/TemporaryBufferPolicy.java
+new file mode 100644
+index 000000000..a23174f2a
+--- /dev/null
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/TemporaryBufferPolicy.java
+@@ -0,0 +1,17 @@
++package com.liskovsoft.smartyoutubetv2.common.exoplayer.other;
++
++public final class TemporaryBufferPolicy {
++    public static final int MAX_BYTES = 500_000_000;
++    public static final int VOD_MAX_MS = 600_000;
++    public static final long LIVE_MAX_US = 30_000_000L;
++
++    private TemporaryBufferPolicy() {}
++
++    public static int budget(long maxHeap, long totalHeap, long freeHeap, long physicalLimit) {
++        long available = Math.max(0, maxHeap - totalHeap + freeHeap);
++        long bytes = Math.min(MAX_BYTES, Math.min(maxHeap / 4, available / 3));
++        if (physicalLimit > 0) bytes = Math.min(bytes, physicalLimit);
++        // One ExoPlayer allocation is the minimum; never impose a large-buffer floor.
++        return (int) Math.max(65_536, bytes);
++    }
++}
+diff --git a/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
+new file mode 100644
+index 000000000..78d41099f
+--- /dev/null
++++ b/common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/RelatedVideoRanker.java
+@@ -0,0 +1,117 @@
++package com.liskovsoft.smartyoutubetv2.common.misc;
++
++import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
++
++import java.text.Normalizer;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.HashSet;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Locale;
++import java.util.Set;
++
++/** Subject evidence is required; sharing a publisher never makes a video related. */
++public final class RelatedVideoRanker {
++    private static final Set<String> NOISE = new HashSet<>(Arrays.asList((
++            "a an and are as at be been but by for from has have how i in into is it its of on or our that the " +
++            "their this to was we what when why will with you your about after before new latest breaking news " +
++            "live full official video channel watch episode part update updates explained explanation interview " +
++            "och att av den det en ett fran for har hur i med ny nya nyheter om pa som till vad var vid ar " +
++            "subscribe shorts hd uhd 4k 8k guide tutorial setup review tips here need know things everything " +
++            "sa gor du ska").split(" +")));
++
++    private RelatedVideoRanker() {}
++
++    public static List<Video> rank(Video current, List<Video> candidates) {
++        List<Video> result = new ArrayList<>();
++        Set<String> seen = new HashSet<>();
++        java.util.Map<Video, Integer> scores = new java.util.IdentityHashMap<>();
++        if (current == null || candidates == null) return result;
++        for (Video item : candidates) {
++            if (item == null || item.videoId == null || item.videoId.equals(current.videoId) ||
++                    item.isChapter || item.isUpcoming || item.isUnplayable || !seen.add(item.videoId)) continue;
++            int subjectScore = score(current, item);
++            if (subjectScore > 0) { scores.put(item, subjectScore); result.add(item); }
++        }
++        java.util.Collections.sort(result, (left, right) -> {
++            int subject = Integer.compare(scores.get(right), scores.get(left));
++            if (subject != 0) return subject;
++            return Boolean.compare(sameChannel(current, right), sameChannel(current, left));
++        });
++        return result;
++    }
++
++    public static int score(Video current, Video candidate) {
++        if (current == null || candidate == null) return 0;
++        Set<String> subject = terms(current.getTitle());
++        Set<String> other = terms(candidate.getTitle());
++        if (subject.isEmpty() || other.isEmpty()) return 0;
++        int overlap = 0;
++        for (String term : subject) if (other.contains(term)) overlap++;
++        double coverage = (double) overlap / subject.size();
++        double precision = (double) overlap / other.size();
++        // One generic word in a long headline is not evidence of the same subject.
++        if (subject.size() == 1) {
++            if (overlap != 1 || subject.iterator().next().length() < 4 || precision < .25) return 0;
++        } else if (overlap < 2 || coverage < .45 || precision < .30) {
++            return 0;
++        }
++        if (subject.size() >= 4) {
++            // Brand/model prefixes alone (e.g. a camera model) are not enough
++            // when the watched title names a more specific task afterwards.
++            List<String> ordered = new ArrayList<>(subject);
++            boolean focus = false;
++            for (int i = (ordered.size() * 2 + 2) / 3; i < ordered.size(); i++)
++                if (other.contains(ordered.get(i))) focus = true;
++            if (!focus) return 0;
++        }
++        return (int) Math.round(1000 * (.75 * coverage + .25 * precision));
++    }
++
++    public static int bestScore(Video current, List<Video> candidates) {
++        int best = 0;
++        for (Video candidate : candidates) best = Math.max(best, score(current, candidate));
++        return best;
++    }
++
++    public static String subjectQuery(Video current) {
++        if (current == null) return null;
++        StringBuilder query = new StringBuilder();
++        int count = 0;
++        for (String term : terms(current.getTitle())) {
++            if (count++ == 8) break;
++            if (query.length() > 0) query.append(' ');
++            query.append(term);
++        }
++        return query.length() == 0 ? null : query.toString();
++    }
++
++    private static boolean sameChannel(Video current, Video candidate) {
++        if (current.channelId != null && candidate.channelId != null)
++            return current.channelId.equals(candidate.channelId);
++        String author = normalize(current.getAuthor());
++        return !author.isEmpty() && author.equals(normalize(candidate.getAuthor()));
++    }
++
++    private static Set<String> terms(String title) {
++        Set<String> result = new LinkedHashSet<>();
++        for (String word : normalize(title).split(" +")) {
++            if (word.length() < 2 || NOISE.contains(word) ||
++                    word.matches("(?:19|20)[0-9]{2}")) continue;
++            if (word.equals("replacing") || word.equals("replacement")) word = "replace";
++            else if (word.equals("filtering")) word = "filter";
++            else if (word.length() > 4 && word.endsWith("s") && !word.endsWith("ss") &&
++                    !word.endsWith("sis") && !word.endsWith("us"))
++                word = word.substring(0, word.length() - 1);
++            result.add(word);
++        }
++        return result;
++    }
++
++    private static String normalize(String value) {
++        return value == null ? "" : Normalizer.normalize(value, Normalizer.Form.NFKD)
++                .replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT)
++                .replaceAll("[^\\p{L}\\p{N}]+", " ").trim();
++    }
++}
+diff --git a/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/PreferredNewsRequestTest.java b/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/PreferredNewsRequestTest.java
+new file mode 100644
+index 000000000..1c73944a2
+--- /dev/null
++++ b/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/PreferredNewsRequestTest.java
+@@ -0,0 +1,34 @@
++package com.liskovsoft.smartyoutubetv2.common.exoplayer.other;
++
++import static org.junit.Assert.*;
++
++import com.liskovsoft.youtubeapi.common.helpers.NewsRequestLocale;
++import org.json.JSONObject;
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.RobolectricTestRunner;
++import org.robolectric.annotation.Config;
++
++@RunWith(RobolectricTestRunner.class)
++@Config(sdk = 28, manifest = Config.NONE)
++public class PreferredNewsRequestTest {
++    private static final String THAI_CONTEXT = "{\"context\":{\"client\":{\"hl\":\"th\",\"gl\":\"TH\","
++            + "\"acceptLanguage\":\"th\",\"acceptRegion\":\"TH\",\"visitorData\":\"unchanged\"}},\"browseId\":\"FEtopics_news\"}";
++
++    @Test public void swedishRequestOverridesThaiContextWithoutChangingOtherFields() throws Exception {
++        JSONObject result = new JSONObject(NewsRequestLocale.INSTANCE.apply(THAI_CONTEXT, false));
++        JSONObject client = result.getJSONObject("context").getJSONObject("client");
++        assertEquals("sv", client.getString("hl")); assertEquals("SE", client.getString("gl"));
++        assertEquals("sv", client.getString("acceptLanguage")); assertEquals("SE", client.getString("acceptRegion"));
++        assertEquals("unchanged", client.getString("visitorData"));
++        assertEquals("FEtopics_news", result.getString("browseId"));
++        assertEquals("TH", new JSONObject(THAI_CONTEXT).getJSONObject("context").getJSONObject("client").getString("gl"));
++    }
++
++    @Test public void fallbackIsExplicitlyEnglishInsteadOfDeviceLocale() throws Exception {
++        JSONObject client = new JSONObject(NewsRequestLocale.INSTANCE.apply(THAI_CONTEXT, true))
++                .getJSONObject("context").getJSONObject("client");
++        assertEquals("en", client.getString("hl")); assertEquals("GB", client.getString("gl"));
++        assertEquals("en", client.getString("acceptLanguage")); assertEquals("GB", client.getString("acceptRegion"));
++    }
++}
+diff --git a/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControlTest.java b/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControlTest.java
+new file mode 100644
+index 000000000..24f7da267
+--- /dev/null
++++ b/common/src/test/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/other/SessionLoadControlTest.java
+@@ -0,0 +1,83 @@
++package com.liskovsoft.smartyoutubetv2.common.exoplayer.other;
++
++import static org.junit.Assert.*;
++
++import com.google.android.exoplayer2.C;
++import com.google.android.exoplayer2.Player;
++import com.google.android.exoplayer2.Renderer;
++import com.google.android.exoplayer2.source.SinglePeriodTimeline;
++import com.google.android.exoplayer2.source.TrackGroupArray;
++import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
++import com.google.android.exoplayer2.upstream.Allocation;
++import com.google.android.exoplayer2.upstream.DefaultAllocator;
++
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.RobolectricTestRunner;
++import org.robolectric.annotation.Config;
++
++@RunWith(RobolectricTestRunner.class)
++@Config(sdk = 28, manifest = Config.NONE)
++public class SessionLoadControlTest {
++    private SessionLoadControl prepared() {
++        SessionLoadControl control = new SessionLoadControl(2_000_000);
++        control.onPrepared();
++        control.onTracksSelected(new Renderer[0], TrackGroupArray.EMPTY, new TrackSelectionArray());
++        return control;
++    }
++
++    @Test public void vodReadsAheadButStopsAtTenMinutes() {
++        SessionLoadControl control = prepared();
++        control.onTimelineChanged(new SinglePeriodTimeline(1_800_000_000L, true, false), null, 0);
++        assertTrue(control.shouldContinueLoading(0, 1));
++        assertTrue(control.shouldContinueLoading(100_000_000, 1));
++        assertFalse(control.shouldContinueLoading(600_000_000, 1));
++    }
++
++    @Test public void liveAndUnknownDurationStayBounded() {
++        SessionLoadControl control = prepared();
++        assertFalse(control.shouldContinueLoading(30_000_000, 1));
++        control.onTimelineChanged(new SinglePeriodTimeline(900_000_000L, true, true), null, 0);
++        assertFalse(control.shouldContinueLoading(30_000_000, 1));
++        control.onTimelineChanged(new SinglePeriodTimeline(C.TIME_UNSET, true, false), null, 0);
++        assertFalse(control.shouldContinueLoading(30_000_000, 1));
++    }
++
++    @Test public void byteBudgetWinsEvenBeforeMinimumTime() {
++        SessionLoadControl control = prepared();
++        DefaultAllocator allocator = (DefaultAllocator) control.getAllocator();
++        java.util.List<Allocation> allocations = new java.util.ArrayList<>();
++        while (allocator.getTotalBytesAllocated() < 2_000_000) allocations.add(allocator.allocate());
++        assertFalse(control.shouldContinueLoading(1_000, 1));
++        assertTrue(allocator.getTotalBytesAllocated() < 2_000_000 + 65_536);
++        for (Allocation allocation : allocations) allocator.release(allocation);
++        control.onReleased();
++    }
++
++    @Test public void completionStopReleaseAndNextVideoDiscardUnusedPool() {
++        for (int event = 0; event < 4; event++) {
++            SessionLoadControl control = prepared();
++            DefaultAllocator allocator = (DefaultAllocator) control.getAllocator();
++            Allocation old = allocator.allocate();
++            allocator.release(old);
++            if (event == 0) control.onPlayerStateChanged(false, Player.STATE_ENDED);
++            if (event == 1) control.onStopped();
++            if (event == 2) control.onReleased();
++            if (event == 3) control.onPrepared();
++            Allocation next = allocator.allocate();
++            assertNotSame(old, next);
++            allocator.release(next);
++            control.onReleased();
++        }
++    }
++
++    @Test public void playbackAndRebufferTargetsRemainShortAndSeekingKeepsNoBackBuffer() {
++        SessionLoadControl control = prepared();
++        assertFalse(control.shouldStartPlayback(2_000_000, 1, false));
++        assertTrue(control.shouldStartPlayback(3_000_000, 1, false));
++        assertFalse(control.shouldStartPlayback(6_000_000, 1, true));
++        assertTrue(control.shouldStartPlayback(7_000_000, 1, true));
++        assertEquals(0, control.getBackBufferDurationUs());
++        assertFalse(control.retainBackBufferFromKeyframe());
++    }
++}
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
+index a08b75ecd..5a96e3ce1 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumbleCards.java
+@@ -47,6 +47,10 @@ public final class PatRumbleCards {
+     }
+ 
+     public static void lookupTopic(PatSyncClient sync, String topic, String suggestions, PatSyncClient.Callback reply) {
++        if (com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.isNewsTopic(topic)) {
++            sync.rumbleNews(reply);
++            return;
++        }
+         // The untitled YouTube recommendation group uses a generic label.
+         if (topic.equals(suggestions) || "Recommended".equalsIgnoreCase(topic)) {
+             sync.rumbleLive(reply);
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
+index ff290908f..2dbae22ab 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatRumblePlayerActivity.java
+@@ -154,8 +154,8 @@ public final class PatRumblePlayerActivity extends Activity {
+ 
+     private void createPlayer() {
+         loading.setVisibility(View.GONE);
+-        DefaultLoadControl load = new DefaultLoadControl.Builder()
+-                .setBufferDurationsMs(30_000, 90_000, 3_000, 7_000).createDefaultLoadControl();
++        com.liskovsoft.smartyoutubetv2.common.exoplayer.other.SessionLoadControl load =
++                new com.liskovsoft.smartyoutubetv2.common.exoplayer.other.SessionLoadControl(0);
+         player = ExoPlayerFactory.newSimpleInstance(this, new com.google.android.exoplayer2.DefaultRenderersFactory(this),
+                 new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(), load);
+         AudioAttributes audio = new AudioAttributes.Builder()
+@@ -166,6 +166,7 @@ public final class PatRumblePlayerActivity extends Activity {
+             // Some Android TV builds deny audio focus even for foreground players.
+             player.setAudioAttributes(audio, false);
+         }
++        player.addListener(load);
+         view.setPlayer(player);
+         player.addListener(new Player.EventListener() {
+             @Override public void onPlayerStateChanged(boolean playWhenReady, int state) {
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
+index ea6d96eb6..8f0b061a0 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PatSyncClient.java
+@@ -490,14 +490,14 @@ public final class PatSyncClient {
+             if (includeNews && (failure == null || failure.code != 401)) {
+                 try {
+                     // A common query shares the server's directory cache across Home refreshes.
+-                    Result news = request(rumbleSearchPath("news"), "GET", null, token);
+-                    if (news.ok()) appendRumbleFeed(videos, seen, news.data, "");
++                    Result news = request(rumbleSearchPath(com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.RUMBLE_QUERY), "GET", null, token);
++                    if (news.ok()) appendRumbleFeed(videos, seen, preferredNewsData(news.data), "");
+                     else if (failure == null) failure = news;
+                 } catch (Exception error) {
+                     if (failure == null) failure = new Result(0, null, "Couldn't reach the Rumble server");
+                 }
+             }
+-            if (videos.length() == 0 && includeLive) {
++            if (videos.length() == 0 && includeLive && !includeNews) {
+                 Result fallback = request("/v1/rumble/live", "GET", null, token);
+                 if (fallback.ok() || failure == null) return fallback;
+             }
+@@ -524,6 +524,28 @@ public final class PatSyncClient {
+         }
+     }
+ 
++    private static JSONObject preferredNewsData(JSONObject feed) throws org.json.JSONException {
++        JSONArray filtered = new JSONArray();
++        JSONArray items = feed == null ? null : feed.optJSONArray("videos");
++        if (items != null) for (int i = 0; i < items.length(); i++) {
++            JSONObject item = items.optJSONObject(i);
++            if (item != null && com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.accepts(
++                    item.optString("title"), item.optString("channelName"), "", true)) filtered.put(item);
++        }
++        return new JSONObject().put("videos", filtered);
++    }
++
++    public void rumbleNews(Callback done) {
++        rumbleSearch(com.liskovsoft.youtubeapi.common.helpers.PreferredNewsPolicy.RUMBLE_QUERY, result -> {
++            if (!result.ok()) { done.onResult(result); return; }
++            try {
++                done.onResult(new Result(result.code, preferredNewsData(result.data), result.message));
++            } catch (org.json.JSONException error) {
++                done.onResult(new Result(0, null, "News unavailable"));
++            }
++        });
++    }
++
+     private static String rumbleSearchPath(String query) throws java.io.UnsupportedEncodingException {
+         return "/v1/rumble/search?q=" + java.net.URLEncoder.encode(query, "UTF-8");
+     }
+diff --git a/smarttubetv/src/test/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PreferredRumbleNewsTest.java b/smarttubetv/src/test/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PreferredRumbleNewsTest.java
+new file mode 100644
+index 000000000..c27d5069b
+--- /dev/null
++++ b/smarttubetv/src/test/java/com/liskovsoft/smartyoutubetv2/mobile/sync/PreferredRumbleNewsTest.java
+@@ -0,0 +1,40 @@
++package com.liskovsoft.smartyoutubetv2.mobile.sync;
++
++import static org.junit.Assert.*;
++import org.json.JSONArray;
++import org.json.JSONObject;
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.RobolectricTestRunner;
++import org.robolectric.annotation.Config;
++
++@RunWith(RobolectricTestRunner.class)
++@Config(sdk = 28, manifest = Config.NONE)
++public class PreferredRumbleNewsTest {
++    private JSONObject filter(JSONObject feed) throws Exception {
++        java.lang.reflect.Method method = PatSyncClient.class.getDeclaredMethod("preferredNewsData", JSONObject.class);
++        method.setAccessible(true);
++        return (JSONObject) method.invoke(null, feed);
++    }
++
++    @Test public void newsSeedFiltersThaiAndUnrelatedItemsWithoutChangingAcceptedPlaybackData() throws Exception {
++        JSONObject accepted = new JSONObject().put("id", "english")
++                .put("title", "BREAKING: Flooding after powerful storm").put("channelName", "Reporter")
++                .put("streamUrl", "https://example.com/video.m3u8");
++        JSONArray videos = new JSONArray().put(accepted)
++                .put(new JSONObject().put("id", "thai").put("title", "ข่าวด่วนจากกรุงเทพ"))
++                .put(new JSONObject().put("id", "random").put("title", "Cooking the perfect pasta"))
++                .put(new JSONObject().put("id", "missing"));
++        JSONObject source = new JSONObject().put("videos", videos);
++        JSONArray result = filter(source).getJSONArray("videos");
++        assertEquals(1, result.length());
++        assertEquals("english", result.getJSONObject(0).getString("id"));
++        assertEquals("https://example.com/video.m3u8", result.getJSONObject(0).getString("streamUrl"));
++        assertEquals(4, source.getJSONArray("videos").length());
++    }
++
++    @Test public void missingNewsStaysEmptyInsteadOfIntroducingRandomLiveVideos() throws Exception {
++        assertEquals(0, filter(null).getJSONArray("videos").length());
++        assertEquals(0, filter(new JSONObject()).getJSONArray("videos").length());
++    }
++}

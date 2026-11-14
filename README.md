@@ -2,11 +2,19 @@
 
 Mobile-friendly Android phone edition of [SmartTube](https://github.com/yuliskov/SmartTube).
 
-Version **v19** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
+Version **v20** opens on YouTube Home. Use the YouTube and Rumble icons in the header to switch the mobile feed. Home shows 19 videos at a time. Tap **Show more** for up to 19 more.
+
+- Player suggestions prioritize the watched subject, with channel as a tie-breaker.
+- News prefers Swedish/Sweden coverage with an English breaking-news fallback;
+  automatic news does not use the device's Thai region.
+- Adaptive temporary VOD read-ahead targets up to 500 MB where heap capacity
+  permits, scales down on smaller devices, and frees consumed/unused buffers.
+  It does not promise a full-video or offline download. See
+  [behavior and validation details](DISCOVERY_AND_BUFFERING.md).
 
 - Rumble Home mixes followed channels with recent news, newest first. A per-channel
   limit leaves room for other publishers. Live videos or Editor's Picks can fill in
-  when no follows or news are available.
+  in the ordinary followed-channel browser. Automatic news stays subject-filtered.
 - **Follow on Rumble** in the YouTube player controls lets you choose a matching
   channel to save to your synced SmartTube follows.
 - A Rumble player using HTTPS HLS or MP4 with alternate-stream recovery after

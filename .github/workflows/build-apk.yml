@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Build and stage a signed v19 update'
+        description: 'Build and stage a signed v20 update'
         required: false
         type: boolean
         default: false
@@ -111,6 +111,14 @@ jobs:
         working-directory: upstream
         run: ./gradlew :exoplayer-library-sabr:testStstableDebugUnitTest --tests '*SabrProtectionStatusTest' --stacktrace
 
+      - name: Verify temporary buffer and news locale behavior
+        working-directory: upstream
+        run: ./gradlew :common:testStstableDebugUnitTest --tests '*SessionLoadControlTest' --tests '*PreferredNewsRequestTest' --stacktrace
+
+      - name: Verify Rumble news filtering
+        working-directory: upstream
+        run: ./gradlew :smarttubetv:testStmobileDebugUnitTest --tests '*PreferredRumbleNewsTest' --stacktrace
+
       - name: Build ARM64 APK
         working-directory: upstream
         run: |
@@ -123,14 +131,16 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p output
-          apk_path="$(find upstream/smarttubetv/build/outputs/apk -type f -name '*arm64-v8a.apk' | head -n 1)"
+          variant=debug
+          if [ "$SIGNED_BUILD" = "true" ]; then variant=release; fi
+          apk_path="$(find "upstream/smarttubetv/build/outputs/apk/stmobile/$variant" -type f -name '*arm64-v8a.apk' | head -n 1)"
           test -n "$apk_path"
           if [ "$SIGNED_BUILD" = "true" ]; then
-            cp "$apk_path" output/SmartTube-Mobile-v19-ARM64.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v19-ARM64-APK" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v20-ARM64.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v20-ARM64-APK" >> "$GITHUB_ENV"
           else
-            cp "$apk_path" output/SmartTube-Mobile-v19-DEBUG-TEST-ONLY.apk
-            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v19-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
+            cp "$apk_path" output/SmartTube-Mobile-v20-DEBUG-TEST-ONLY.apk
+            echo "APK_ARTIFACT_NAME=SmartTube-Mobile-v20-DEBUG-TEST-ONLY" >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -151,17 +161,17 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Mobile-v19-ARM64-APK
+          name: SmartTube-Mobile-v20-ARM64-APK
           path: output
       - name: Stage release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v19 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "v19 is already published; increment the mobile version for the next release."
+          if gh release view v20 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v20 is already published; increment the mobile version for the next release."
           else
-            gh release create v19 output/SmartTube-Mobile-v19-ARM64.apk \
+            gh release create v20 output/SmartTube-Mobile-v20-ARM64.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "SmartTube Mobile v19 — SABR playback recovery" \
-              --notes "Fixes premature SABR attestation errors, refreshes playback nonces for fallback clients, and bounds repeated stream recovery. Preserves Rumble, sync and mobile features. Production-signed update; real device playback still needs confirmation."
+              --title "SmartTube Mobile v20 — Relevant suggestions, preferred news and adaptive buffering" \
+              --notes "Player suggestions prioritize the watched subject, with channel as a tie-breaker. News prefers Sweden/Swedish with English breaking-news fallback and filters Thai news. Temporary VOD read-ahead targets up to 500 MB when heap capacity permits, otherwise scales down; live/unknown streams stay short. No offline/full-video download is promised. Preserves signed in-place updates, SABR recovery, Rumble and sync. Device playback confirmation remains required."
           fi
