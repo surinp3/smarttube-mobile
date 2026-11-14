@@ -1,0 +1,43 @@
+{
+  "installedCode": 3011,
+  "selections": [
+    {
+      "abi": "armeabi-v7a",
+      "latestCode": 3017,
+      "urls": [
+        "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk",
+        "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARMv7.apk"
+      ]
+    },
+    {
+      "abi": "arm64-v8a",
+      "latestCode": 3017,
+      "urls": [
+        "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk",
+        "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-ARM64.apk"
+      ]
+    },
+    {
+      "abi": "unknown",
+      "latestCode": 3017,
+      "urls": [
+        "https://jobhub.asia/downloads/smarttube-tv/tv-v17/SmartTube-Pat-TV-v17-Universal.apk",
+        "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v17/SmartTube-Pat-TV-v17-Universal.apk"
+      ]
+    }
+  ],
+  "elapsedMs": 7952,
+  "returnedPath": true,
+  "downloadedSize": 45733931,
+  "sha256": "41db73bb649ca855c70c053cde3f24ae27b6baff76d0cff4b2f6af3e5d893c85",
+  "downloadCallback": true,
+  "osInstallation": "not performed",
+  "parsedPackage": "app.smarttube.pattv",
+  "parsedCode": 3017,
+  "probeCompletedAtUTC": "2026-11-14T16:26:05.474921+00:00",
+  "v11ReleaseSourceCommit": "930f9fe3759fa05eefe6bf8ab2bc80060c25e10f",
+  "originalSharedModulesPin": "5b6b5d1d3ba670e3f89edef1d1394a7562251f2c",
+  "targetApkSourceCommit": "de28a008f75510e83f2c8f06fb9862b5560eac90",
+  "productionCertificateSha256": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+  "probeEnvironment": "Original v11 parser/download code in Robolectric API 28, real deployed manifest and APK, no OS package replacement"
+}

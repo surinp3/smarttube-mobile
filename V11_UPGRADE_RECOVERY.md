@@ -56,7 +56,7 @@ an actual Android package replacement is not, because no device is attached.
 
 1. Download the **Universal** production APK from the
    [TV v17 release](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v17).
-   While v17 is being prepared, the already verified
+   The earlier verified
    [TV v16 Universal APK](https://jobhub.asia/downloads/smarttube-tv/tv-v16/SmartTube-Pat-TV-v16-Universal.apk)
    is also compatible with v11. Universal covers both ARM architectures.
 2. Transfer the APK to the TV using your existing file-transfer app or USB,
@@ -82,5 +82,38 @@ No ADB device was connected and this command was not run. Actual TV storage,
 unknown-source permission, OS installation, UI and playback remain to be
 confirmed. No app was uninstalled and no signing key was changed.
 
-Final production-build, download and updater-delivery checks are recorded
-after the recovery release is published.
+## Final published verification
+
+[TV v17](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v17) is
+published with code 3017 from source `de28a008f75510e83f2c8f06fb9862b5560eac90`.
+The [production workflow](https://github.com/surinp3/smarttube-mobile/actions/runs/43614579709)
+passed the nine recovery cases and all existing applicable maintenance,
+playback, news, buffer, Rumble and TV-player gates. Local release assembly
+also passed. All three signed APKs have the expected package, code and ARM
+architectures, no debug flag and the same permanent certificate as v11.
+Three public GitHub downloads and three TV mirror downloads returned 200 and
+matched their sizes and SHA-256 digests. Mobile latest remains v22.
+
+The exact public `tv_update.json` URL serves code 3017 and two-host URL lists
+for ARMv7, ARM64 and Universal. A post-deployment probe then ran the original
+v11 parser and downloader code, with installed version set to 3011, against
+that real live response. All three ABI selections chose 3017. Its original
+60-second downloader returned a completed path and success callback for the
+actual ARMv7 APK in **7,952 ms**, **45,733,931 bytes**, with matching SHA-256
+`41db73bb649ca855c70c053cde3f24ae27b6baff76d0cff4b2f6af3e5d893c85`.
+Android's package parser in the test environment identified package
+`app.smarttube.pattv`, code 3017, from that actual download. See
+[original-client live upgrade evidence](release-verification/v11-to-v17-live.json)
+and [signed/public delivery evidence](release-verification/tv-v17-delivery.json).
+
+This concretely verifies v11-to-current response parsing, URL selection,
+download, file hash and archive identity. The installer content URI and read
+permission are covered by the recovery tests. It does not prove OS installation
+or playback on Pat's TV, and the device-specific reason for the original
+null-path error remains unconfirmed. V11 retains its old cutoff until updated;
+manual in-place installation is required if neither host completes within its
+limits or the old app cannot write its cache. No app was uninstalled or had its
+data cleared. Existing Java 11/WorkManager lint-registry warnings remain;
+full lint coverage is not claimed. Previous releases and manifest history are
+retained; a future recovery needs unused tv-v18/code 3018 or higher.
+

@@ -83,3 +83,13 @@ separate channels.
 - The recovery pipeline's unit tests cover version selection and TV updater
   routing. A real signed recovery APK should be exercised on the device before
   relying on this for a critical upgrade.
+
+
+## Legacy TV v11 reports a null install path
+
+Use [the tested v11 upgrade and manual recovery procedure](V11_UPGRADE_RECOVERY.md).
+The deployed TV v17 manifest is compatible with v11 and supplies mirror/GitHub
+fallbacks. The frozen v11 client fetched its real APK successfully in the live
+probe. V11 can still fail on device-specific network/storage errors or its
+hard-coded one-minute transfer cutoff. If retrying fails, install the signed
+TV v17 Universal APK in place; do not uninstall or clear app storage.

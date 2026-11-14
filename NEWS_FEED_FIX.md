@@ -80,7 +80,7 @@ is v21; the TV updater uses code 3015 and verified tv-v15 mirror paths.
 See [artifact and public-download evidence](release-verification/news-v21-tv-v15.json).
 
 Previous v20/tv-v14 assets and TV manifest history remain. Future in-place
-recovery needs unused v23/tv-v17 or higher and codes at least 2476/3017.
+recovery needs unused v23/tv-v18 or higher and codes at least 2476/3018.
 The sync health check passed; backend code and SQLite were not changed.
 Existing Java 11/WorkManager lint-registry compatibility warnings remain;
 full lint coverage is not claimed. Real device behavior remains unverified.
@@ -108,5 +108,5 @@ not 24 Swedish items or a broad Swedish general-news selection. Counts and
 availability change over time. Real phone/TV rendering, remote operation,
 spoken audio language and actual playback remain unverified. Previous
 v21/tv-v15 releases and manifest history remain; future recovery requires
-unused v23/tv-v17 or higher and codes at least 2476/3017. The sync service
+unused v23/tv-v18 or higher and codes at least 2476/3018. The sync service
 health check passed, and backend code/SQLite were unchanged.

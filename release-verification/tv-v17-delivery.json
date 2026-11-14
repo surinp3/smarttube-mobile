@@ -91,5 +91,9 @@
   "tvUpdaterVersionCode": 3017,
   "tvUpdaterBaselineBlob": "6c59bdbd76d71768f9016bf094e55290cf963ee2",
   "legacyV11LiveV16Probe": "v11-live-upgrade-probe.json",
-  "osInstallation": "not performed"
+  "osInstallation": "not performed",
+  "liveUpdaterHTTPStatus": 200,
+  "liveUpdaterVersionCode": 3017,
+  "liveOriginalV11UpgradeProbe": "v11-to-v17-live.json",
+  "manifestDeliveryCommit": "f80ddd9"
 }
