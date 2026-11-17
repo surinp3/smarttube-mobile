@@ -10,6 +10,7 @@ on:
       - 'news.patch'
       - 'news-mediaservice.patch'
       - 'tv-player.patch'
+      - 'rumble-tv.patch'
       - 'pat-sync.patch'
       - 'mobile.patch'
       - 'mediaservice.patch'
@@ -30,6 +31,7 @@ on:
       - 'news.patch'
       - 'news-mediaservice.patch'
       - 'tv-player.patch'
+      - 'rumble-tv.patch'
       - 'pat-sync.patch'
       - 'mobile.patch'
       - 'mediaservice.patch'
@@ -86,6 +88,8 @@ jobs:
           git -C upstream/SharedModules apply ../../updater-shared.patch
           git -C upstream apply --check ../updater.patch
           git -C upstream apply ../updater.patch
+          git -C upstream apply --check ../rumble-tv.patch
+          git -C upstream apply ../rumble-tv.patch
           chmod +x upstream/gradlew
 
       - name: Set up Java 11
@@ -164,7 +168,7 @@ jobs:
 
       - name: Verify TV player suggestions and remote control
         working-directory: upstream
-        run: ./gradlew :smarttubetv:testStpattvDebugUnitTest --tests '*TvPlayerSuggestionsTest' --tests '*LegacyUpgradeTest' --stacktrace
+        run: ./gradlew :smarttubetv:testStpattvDebugUnitTest --tests '*TvPlayerSuggestionsTest' --tests '*LegacyUpgradeTest' --tests '*RumbleTvRemoteTest' --stacktrace
 
       - name: Build all Google TV ARM architectures
         working-directory: upstream
@@ -190,15 +194,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v17-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v17-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v17-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v17-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v18-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v18-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v18-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v18-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v17-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v17-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v17-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v17-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v18-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v18-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v18-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v18-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -219,21 +223,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v17-SIGNED-APKs
+          name: SmartTube-Pat-TV-v18-SIGNED-APKs
           path: output
       - name: Stage TV release for signature verification
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v17 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v17 is already published; increment the TV version for the next release.'
+          if gh release view tv-v18 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v18 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v17 \
-              output/SmartTube-Pat-TV-v17-ARMv7.apk \
-              output/SmartTube-Pat-TV-v17-ARM64.apk \
-              output/SmartTube-Pat-TV-v17-Universal.apk \
+            gh release create tv-v18 \
+              output/SmartTube-Pat-TV-v18-ARMv7.apk \
+              output/SmartTube-Pat-TV-v18-ARM64.apk \
+              output/SmartTube-Pat-TV-v18-Universal.apk \
               --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v17 - Compatible update recovery' \
-              --notes 'Improves legacy TV update recovery: longer transfers, complete-download checks, atomic APK saving and useful error messages. Adds alternate GitHub download URLs understood by v11. Verifies the frozen v11 parser, actual public APK downloads, signing compatibility and installer handoff. Preserves news, related videos, buffering, playback recovery, Rumble and sync. Install as an update without uninstalling or clearing storage. Device-specific installation remains unverified; see V11_UPGRADE_RECOVERY.md.' \
+              --title 'SmartTube Pat TV v18 - Rumble remote controls' \
+              --notes 'Restores Rumble remote focus and playback control on TV: center pauses/resumes, hidden-controller Left/Right seek, Up/Down open controls and navigate Follow/buttons/timeline, media keys work from the header, and Back hides controls before exiting. Includes held-key, seeking-boundary, non-seekable-stream, timeout and reopen regression tests. Preserves YouTube playback, Mobile v22, updater recovery, news, buffering and sync. Install as an in-place update. Actual TV remote/playback testing remains to be confirmed.' \
               --latest=false
           fi

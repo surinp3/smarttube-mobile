@@ -1,0 +1,177 @@
+{
+  "runtime": "Robolectric Android API 28 with real Activity/PlayerView/controller and simulated Player; physical keys delivered through ViewRoot",
+  "actualDeviceTested": false,
+  "baseline": {
+    "name": "com.liskovsoft.smartyoutubetv2.mobile.sync.RumbleTvRemoteTest",
+    "tests": "11",
+    "skipped": "0",
+    "failures": "11",
+    "errors": "0",
+    "timestamp": "2026-11-17T04:54:16",
+    "time": "5.739",
+    "cases": [
+      {
+        "name": "controllerTimeoutReturnsFocusAndRemoteWorksAfterResume",
+        "passed": false
+      },
+      {
+        "name": "reopeningAfterBackStartsFocusedAndCanPauseAgain",
+        "passed": false
+      },
+      {
+        "name": "hiddenCenterPausesOnceDespiteRepeatsAndNextPressResumes",
+        "passed": false
+      },
+      {
+        "name": "physicalMediaKeysWorkWhileFollowHasFocus",
+        "passed": false
+      },
+      {
+        "name": "hiddenDirectionsSeekOnDownAndHoldButNotOnReleaseAndClamp",
+        "passed": false
+      },
+      {
+        "name": "enterPausesAndSeekingKeepsPausedState",
+        "passed": false
+      },
+      {
+        "name": "nonSeekableStreamStillPausesWithoutInvalidSeeks",
+        "passed": false
+      },
+      {
+        "name": "initialFocusBelongsToPlaybackNotFollow",
+        "passed": false
+      },
+      {
+        "name": "missingChannelAndPlayerStillAllowControlsAndBack",
+        "passed": false
+      },
+      {
+        "name": "upDownNavigateFollowButtonsAndTimeBarAndCenterKeepsButtonMeaning",
+        "passed": false
+      },
+      {
+        "name": "backHidesControlsOnceThenExits",
+        "passed": false
+      }
+    ]
+  },
+  "fixed": {
+    "name": "com.liskovsoft.smartyoutubetv2.mobile.sync.RumbleTvRemoteTest",
+    "tests": "11",
+    "skipped": "0",
+    "failures": "0",
+    "errors": "0",
+    "timestamp": "2026-11-17T04:54:31",
+    "time": "5.8",
+    "cases": [
+      {
+        "name": "controllerTimeoutReturnsFocusAndRemoteWorksAfterResume",
+        "passed": true
+      },
+      {
+        "name": "reopeningAfterBackStartsFocusedAndCanPauseAgain",
+        "passed": true
+      },
+      {
+        "name": "hiddenCenterPausesOnceDespiteRepeatsAndNextPressResumes",
+        "passed": true
+      },
+      {
+        "name": "physicalMediaKeysWorkWhileFollowHasFocus",
+        "passed": true
+      },
+      {
+        "name": "hiddenDirectionsSeekOnDownAndHoldButNotOnReleaseAndClamp",
+        "passed": true
+      },
+      {
+        "name": "enterPausesAndSeekingKeepsPausedState",
+        "passed": true
+      },
+      {
+        "name": "nonSeekableStreamStillPausesWithoutInvalidSeeks",
+        "passed": true
+      },
+      {
+        "name": "initialFocusBelongsToPlaybackNotFollow",
+        "passed": true
+      },
+      {
+        "name": "missingChannelAndPlayerStillAllowControlsAndBack",
+        "passed": true
+      },
+      {
+        "name": "upDownNavigateFollowButtonsAndTimeBarAndCenterKeepsButtonMeaning",
+        "passed": true
+      },
+      {
+        "name": "backHidesControlsOnceThenExits",
+        "passed": true
+      }
+    ]
+  },
+  "existingRegressions": [
+    {
+      "name": "com.liskovsoft.smartyoutubetv2.tv.ui.playback.LegacyUpgradeTest",
+      "tests": "9",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:54:37"
+    },
+    {
+      "name": "com.liskovsoft.smartyoutubetv2.tv.ui.playback.TvPlayerSuggestionsTest",
+      "tests": "5",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:54:38"
+    },
+    {
+      "name": "com.google.android.exoplayer2.source.sabr.parser.SabrProtectionStatusTest",
+      "tests": "6",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:55:22"
+    },
+    {
+      "name": "com.liskovsoft.smartyoutubetv2.common.exoplayer.other.PreferredNewsFeedTest",
+      "tests": "8",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:55:10"
+    },
+    {
+      "name": "com.liskovsoft.smartyoutubetv2.common.exoplayer.other.PreferredNewsRequestTest",
+      "tests": "2",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:55:13"
+    },
+    {
+      "name": "com.liskovsoft.smartyoutubetv2.common.exoplayer.other.SessionLoadControlTest",
+      "tests": "6",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:55:13"
+    },
+    {
+      "name": "com.liskovsoft.smartyoutubetv2.mobile.sync.PreferredRumbleNewsTest",
+      "tests": "2",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-11-17T04:55:45"
+    }
+  ],
+  "pythonRegressions": {
+    "tests": 14,
+    "failures": 0,
+    "errors": 0
+  }
+}
