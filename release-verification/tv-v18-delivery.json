@@ -1,0 +1,109 @@
+{
+  "sourceCommit": "ad1746c673da6fc06161969382b517275ca41466",
+  "apks": [
+    {
+      "tag": "tv-v18",
+      "name": "SmartTube-Pat-TV-v18-ARMv7.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3018,
+      "versionName": "32.69-tv.18",
+      "sha256": "0550337166df7e695ad6510986e21eec60942231c9a6564c7a3f5dfb264fc072",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 45733941,
+      "nativeCode": "native-code: 'armeabi-v7a'",
+      "rumbleRemoteMethodsPresent": true,
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v18",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-ARMv7.apk"
+    },
+    {
+      "tag": "tv-v18",
+      "name": "SmartTube-Pat-TV-v18-ARM64.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3018,
+      "versionName": "32.69-tv.18",
+      "sha256": "53f8fae4d471a6dd088c73443a4c66be32ca7232f2700bce16b6c7c0b683a3c3",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 56311665,
+      "nativeCode": "native-code: 'arm64-v8a'",
+      "rumbleRemoteMethodsPresent": true,
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v18",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-ARM64.apk"
+    },
+    {
+      "tag": "tv-v18",
+      "name": "SmartTube-Pat-TV-v18-Universal.apk",
+      "package": "app.smarttube.pattv",
+      "versionCode": 3018,
+      "versionName": "32.69-tv.18",
+      "sha256": "f61c44747f1eb557103f0cd5e02e0c7007d2804f2b9f7c9cc985aa3d85f2b37d",
+      "certificate": "98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba",
+      "size": 85621436,
+      "nativeCode": "native-code: 'arm64-v8a' 'armeabi-v7a'",
+      "rumbleRemoteMethodsPresent": true,
+      "releaseUrl": "https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v18",
+      "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-Universal.apk"
+    }
+  ],
+  "devicePlayback": "not verified; no attached Android device",
+  "ci": "https://github.com/surinp3/smarttube-mobile/actions/runs/44020754636",
+  "ciConclusion": "success",
+  "mobileCi": "https://github.com/surinp3/smarttube-mobile/actions/runs/44020754527",
+  "mobileCiConclusion": "success",
+  "publicDownloads": [
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-ARMv7.apk",
+      "status": 200,
+      "sha256": "0550337166df7e695ad6510986e21eec60942231c9a6564c7a3f5dfb264fc072",
+      "size": 45733941,
+      "transferSeconds": 5.299842
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-ARMv7.apk",
+      "status": 200,
+      "sha256": "0550337166df7e695ad6510986e21eec60942231c9a6564c7a3f5dfb264fc072",
+      "size": 45733941,
+      "transferSeconds": 15.96323
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-ARM64.apk",
+      "status": 200,
+      "sha256": "53f8fae4d471a6dd088c73443a4c66be32ca7232f2700bce16b6c7c0b683a3c3",
+      "size": 56311665,
+      "transferSeconds": 8.941985
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-ARM64.apk",
+      "status": 200,
+      "sha256": "53f8fae4d471a6dd088c73443a4c66be32ca7232f2700bce16b6c7c0b683a3c3",
+      "size": 56311665,
+      "transferSeconds": 13.145127
+    },
+    {
+      "channel": "github",
+      "url": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-Universal.apk",
+      "status": 200,
+      "sha256": "f61c44747f1eb557103f0cd5e02e0c7007d2804f2b9f7c9cc985aa3d85f2b37d",
+      "size": 85621436,
+      "transferSeconds": 8.390436
+    },
+    {
+      "channel": "mirror",
+      "url": "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-Universal.apk",
+      "status": 200,
+      "sha256": "f61c44747f1eb557103f0cd5e02e0c7007d2804f2b9f7c9cc985aa3d85f2b37d",
+      "size": 85621436,
+      "transferSeconds": 20.058412
+    }
+  ],
+  "mobileLatestTag": "v22",
+  "mobileLatestAssetDigest": "sha256:5de6a8af3789fe9276718028f77be138c5b44463d951d5557519f19994068658",
+  "updater": {
+    "url": "https://raw.githubusercontent.com/surinp3/smarttube-mobile/main/tv_update.json",
+    "versionCode": 3018,
+    "previousManifestBlob": "ce4cc54853b2071132fef4334915aba116d599c8"
+  }
+}

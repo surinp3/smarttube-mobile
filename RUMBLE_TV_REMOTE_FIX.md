@@ -51,3 +51,15 @@ TV v17 remains available. If recovery is needed after installing v18/code 3018,
 rebuild a known-good TV release through the existing recovery workflow as the
 next unused release, at least v19/code 3019. Keep the permanent signing key and
 install over the existing app; do not uninstall or clear app storage.
+
+## Published artifacts
+
+[TV v18](https://github.com/surinp3/smarttube-mobile/releases/tag/tv-v18) contains
+ARMv7, ARM64 and Universal APKs with package `app.smarttube.pattv`, code 3018 and
+version `32.69-tv.18`. The production signing certificate remains
+`98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba`.
+All three published APK identities, signatures, architectures, remote-control
+methods and GitHub digests were verified. All six full downloads (GitHub and VPS
+mirror for each APK) returned HTTP 200 with matching sizes and SHA-256 hashes.
+The Mobile latest release and original v22 asset fingerprint are unchanged.
+See [signed artifact and delivery evidence](release-verification/tv-v18-delivery.json).
