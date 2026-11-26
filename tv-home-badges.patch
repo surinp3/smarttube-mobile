@@ -1,0 +1,57 @@
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java
+index dd8eba6..8cd9596 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java
+@@ -128,7 +128,7 @@ public class VideoCardPresenter extends LongClickPresenter {
+ 
+         cardView.setTitleText(video.getTitle());
+         cardView.setContentText(video.getSecondTitle());
+-        if (video.videoId == null) {
++        if (!showsVideoSourceBadge() || video.videoId == null) {
+             cardView.setVideoSourceBadge(0, 0);
+         } else if (PatRumbleCards.isRumble(video)) {
+             cardView.setVideoSourceBadge(R.drawable.pat_video_source_rumble, R.string.pat_video_source_rumble);
+@@ -195,6 +195,11 @@ public class VideoCardPresenter extends LongClickPresenter {
+         Glide.with(cardView.getContext().getApplicationContext()).clear(cardView.getMainImageView());
+     }
+ 
++    // Only the Home grid needs to distinguish mixed video sources.
++    protected boolean showsVideoSourceBadge() {
++        return false;
++    }
++
+     protected final void updateDimensions(Context context) {
+         Pair<Integer, Integer> dimens = getCardDimensPx(context);
+ 
+diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java
+index 469ef72..3ec9575 100644
+--- a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java
++++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java
+@@ -67,6 +67,11 @@ public final class HomeGridFragment extends Fragment implements VideoSection, Br
+     };
+ 
+     private final VideoCardPresenter mCards = new VideoCardPresenter() {
++        @Override
++        protected boolean showsVideoSourceBadge() {
++            return true;
++        }
++
+         @Override
+         protected Pair<Integer, Integer> getCardDimensPx(Context context) {
+             int width = mCardWidth > 0 ? mCardWidth : context.getResources().getDimensionPixelSize(R.dimen.card_width);
+diff --git a/smarttubetv/src/main/res/layout/text_badge_image_view.xml b/smarttubetv/src/main/res/layout/text_badge_image_view.xml
+index de61a11..6daa268 100644
+--- a/smarttubetv/src/main/res/layout/text_badge_image_view.xml
++++ b/smarttubetv/src/main/res/layout/text_badge_image_view.xml
+@@ -22,9 +22,9 @@
+         android:layout_width="30dp"
+         android:layout_height="22dp"
+         android:layout_alignParentTop="true"
+-        android:layout_alignParentRight="true"
++        android:layout_alignParentLeft="true"
+         android:layout_marginTop="8dp"
+-        android:layout_marginRight="8dp"
++        android:layout_marginLeft="8dp"
+         android:scaleType="fitCenter"
+         android:visibility="gone"
+         tools:ignore="ContentDescription,RtlHardcoded" />

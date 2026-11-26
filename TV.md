@@ -8,7 +8,7 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
 - Adaptive temporary VOD read-ahead up to ten minutes or a memory-safe target up to 500 MB, with 3-second start and 7-second rebuffer targets. Live/unknown streams stop at 30 seconds; low-buffer mode keeps five seconds. No offline/full-video download is promised.
 - After 12 seconds of cumulative buffering within a minute, TV VOD playback tries another client rather than blindly reloading the same one. SABR reload-token fixes from the pinned upstream revision remain in place.
 - Never silently changes a user's DNS preference to Google DNS during stall recovery.
-- Separate signed `tv-v19` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
+- Separate signed `tv-v20` release with ARMv7, ARM64 and universal options, not test APKs; signed with the permanent signing secret so future updates can install over them.
 - **Related videos** in the player controls opens subject-first suggestions below
   the playing video; a focusable retry card appears when results are unavailable.
   See the [TV v14 player fix and tests](TV_PLAYER_SUGGESTIONS.md).
@@ -27,7 +27,7 @@ Google TV edition of SmartTube, built alongside—not instead of—the SmartTube
   **Recent from your channels**, mixing YouTube subscriptions and Rumble videos
   by upload date. Rumble cards show the channel name and upload date when available.
 - Back from playback restores the watched card in the Home grid, even if recent uploads have moved it.
-- Video cards show rounded corners, a focus frame, a source icon and a title below the thumbnail.
+- Video cards show rounded corners, a focus frame, and a title below the thumbnail. On Home only, video thumbnails show the YouTube or Rumble logo in the top left; dedicated source pages do not repeat these logos.
 - **Settings → Rumble + Bunny sync** opens the shared browser and pairing controls.
   Enter the TV's 10-digit code in the mobile app to connect it to the hosted
   sync service.

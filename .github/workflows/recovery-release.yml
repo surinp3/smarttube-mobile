@@ -133,6 +133,10 @@ jobs:
             git -C upstream apply --check ../known-good/rumble-tv.patch
             git -C upstream apply ../known-good/rumble-tv.patch
           fi
+          if [ "$RECOVERY_APP" = 'tv' ] && [ -f known-good/tv-home-badges.patch ]; then
+            git -C upstream apply --check ../known-good/tv-home-badges.patch
+            git -C upstream apply ../known-good/tv-home-badges.patch
+          fi
           python3 scripts/prepare_recovery.py \
             --app "$RECOVERY_APP" \
             --known-good-tag "$KNOWN_GOOD_TAG" \
