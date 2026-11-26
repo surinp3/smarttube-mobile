@@ -1,17 +1,16 @@
 {
   "package": {
-    "downloadUrl": "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-Universal.apk",
+    "downloadUrl": "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v19/SmartTube-Pat-TV-v19-Universal.apk",
     "downloadUrlList_armeabi-v7a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-ARMv7.apk",
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-ARMv7.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v19/SmartTube-Pat-TV-v19-ARMv7.apk",
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v19/SmartTube-Pat-TV-v19-Universal.apk"
     ],
     "downloadUrlList_arm64-v8a": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-ARM64.apk",
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-ARM64.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v19/SmartTube-Pat-TV-v19-ARM64.apk",
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v19/SmartTube-Pat-TV-v19-Universal.apk"
     ],
     "downloadUrlList": [
-      "https://jobhub.asia/downloads/smarttube-tv/tv-v18/SmartTube-Pat-TV-v18-Universal.apk",
-      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v18/SmartTube-Pat-TV-v18-Universal.apk"
+      "https://github.com/surinp3/smarttube-mobile/releases/download/tv-v19/SmartTube-Pat-TV-v19-Universal.apk"
     ]
   },
   "32.69-tv.3": {
@@ -141,6 +140,13 @@
       "Back hides visible controls before exiting; held keys, non-seekable streams, timeout and reopen flows have regression coverage",
       "Preserves YouTube playback, news, buffering, sync, production signing and legacy updater download fallbacks",
       "Actual TV remote and playback testing remains to be confirmed"
+    ]
+  },
+  "32.69-tv.19": {
+    "versionCode": 3019,
+    "changelog": [
+      "Back from playback returns focus to the video you opened on the TV Home grid.",
+      "Keeps the same card selected when new uploads move it in the grid."
     ]
   }
 }
