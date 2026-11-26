@@ -194,15 +194,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v18-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v18-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v18-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v18-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v19-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v19-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v19-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v19-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v18-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v18-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v18-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v18-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v19-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v19-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v19-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v19-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -223,21 +223,40 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v18-SIGNED-APKs
+          name: SmartTube-Pat-TV-v19-SIGNED-APKs
           path: output
-      - name: Stage TV release for signature verification
+      - name: Verify package, version, architectures and production signature
+        run: |
+          tools="$(find "${ANDROID_HOME:?}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          expected_cert=98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba
+          for variant in ARMv7 ARM64 Universal; do
+            apk="output/SmartTube-Pat-TV-v19-${variant}.apk"
+            cert="$("$tools/apksigner" verify --print-certs "$apk")"
+            grep -Fx "Signer #1 certificate SHA-256 digest: $expected_cert" <<< "$cert"
+            badging="$("$tools/aapt" dump badging "$apk")"
+            grep -F "package: name='app.smarttube.pattv' versionCode='3019' versionName='32.69-tv.19'" <<< "$badging"
+            case "$variant" in
+              ARMv7) grep -Ex "native-code: 'armeabi-v7a'[[:space:]]*" <<< "$badging" ;;
+              ARM64) grep -Ex "native-code: 'arm64-v8a'[[:space:]]*" <<< "$badging" ;;
+              Universal)
+                grep '^native-code:' <<< "$badging" | grep -F "'armeabi-v7a'" | grep -F "'arm64-v8a'"
+                ;;
+            esac
+            sha256sum "$apk"
+          done
+      - name: Publish verified TV release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v18 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v18 is already published; increment the TV version for the next release.'
+          if gh release view tv-v19 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v19 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v18 \
-              output/SmartTube-Pat-TV-v18-ARMv7.apk \
-              output/SmartTube-Pat-TV-v18-ARM64.apk \
-              output/SmartTube-Pat-TV-v18-Universal.apk \
-              --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v18 - Rumble remote controls' \
-              --notes 'Restores Rumble remote focus and playback control on TV: center pauses/resumes, hidden-controller Left/Right seek, Up/Down open controls and navigate Follow/buttons/timeline, media keys work from the header, and Back hides controls before exiting. Includes held-key, seeking-boundary, non-seekable-stream, timeout and reopen regression tests. Preserves YouTube playback, Mobile v22, updater recovery, news, buffering and sync. Install as an in-place update. Actual TV remote/playback testing remains to be confirmed.' \
+            gh release create tv-v19 \
+              output/SmartTube-Pat-TV-v19-ARMv7.apk \
+              output/SmartTube-Pat-TV-v19-ARM64.apk \
+              output/SmartTube-Pat-TV-v19-Universal.apk \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title 'SmartTube Pat TV v19 - Restore watched video focus' \
+              --notes 'Returns focus to the video you opened when leaving YouTube or Rumble playback from the TV Home grid, even when recent uploads refresh or move the card. Preserves existing playback controls and settings.' \
               --latest=false
           fi

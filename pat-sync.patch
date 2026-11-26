@@ -2920,10 +2920,10 @@ index 5438f87d5..3288988c0 100644
                  && lastGroup.getMediaGroup().getNextPageKey() == null
 diff --git a/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java
 new file mode 100644
-index 000000000..f6be8e270
+index 0000000..469ef72
 --- /dev/null
 +++ b/smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/browse/video/HomeGridFragment.java
-@@ -0,0 +1,480 @@
+@@ -0,0 +1,610 @@
 +package com.liskovsoft.smartyoutubetv2.tv.ui.browse.video;
 +
 +import android.content.Context;
@@ -2931,9 +2931,11 @@ index 000000000..f6be8e270
 +import android.graphics.Typeface;
 +import android.os.Bundle;
 +import android.util.Pair;
++import android.view.KeyEvent;
 +import android.view.LayoutInflater;
 +import android.view.View;
 +import android.view.ViewGroup;
++import android.view.ViewTreeObserver;
 +import android.widget.Button;
 +import android.widget.TextView;
 +
@@ -2983,6 +2985,12 @@ index 000000000..f6be8e270
 +    private int mSpacing;
 +    private int mRecentLimit = RECENT_PAGE_SIZE;
 +    private boolean mFocusFirstRecent;
++    private PlaybackAnchor mPlaybackAnchor;
++    private boolean mReturningFromPlayback;
++    private int mFocusRequest;
++    private final ViewTreeObserver.OnWindowFocusChangeListener mWindowFocusListener = focused -> {
++        if (focused) restorePlaybackFocus();
++    };
 +
 +    private final VideoCardPresenter mCards = new VideoCardPresenter() {
 +        @Override
@@ -3016,7 +3024,22 @@ index 000000000..f6be8e270
 +            Video video = (Video) item;
 +            if (!PatRumbleCards.isRumble(video)) mBrowse.onVideoItemLongClicked(video);
 +        });
-+        mGrid = new RecyclerView(requireContext());
++        mGrid = new RecyclerView(requireContext()) {
++            @Override
++            public boolean dispatchKeyEvent(KeyEvent event) {
++                if (event.getAction() == KeyEvent.ACTION_DOWN) {
++                    switch (event.getKeyCode()) {
++                        case KeyEvent.KEYCODE_DPAD_UP:
++                        case KeyEvent.KEYCODE_DPAD_DOWN:
++                        case KeyEvent.KEYCODE_DPAD_LEFT:
++                        case KeyEvent.KEYCODE_DPAD_RIGHT:
++                            clearPlaybackAnchor();
++                            break;
++                    }
++                }
++                return super.dispatchKeyEvent(event);
++            }
++        };
 +        mSpacing = getResources().getDimensionPixelSize(R.dimen.grid_item_horizontal_spacing);
 +        int margin = getResources().getDimensionPixelSize(R.dimen.grid_horizontal_margin);
 +        int top = getResources().getDimensionPixelSize(R.dimen.lb_browse_rows_margin_top);
@@ -3051,13 +3074,28 @@ index 000000000..f6be8e270
 +            mHost.getFragmentHost().notifyViewCreated(mHost);
 +            mHost.getFragmentHost().notifyDataReady(mHost);
 +        }
++        mGrid.getViewTreeObserver().addOnWindowFocusChangeListener(mWindowFocusListener);
 +        render(null);
++    }
++
++    @Override
++    public void onPause() {
++        super.onPause();
++        if (mPlaybackAnchor != null) mReturningFromPlayback = true;
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        restorePlaybackFocus();
 +    }
 +
 +    @Override
 +    public void onDestroyView() {
 +        cancelTopic();
 +        mRequested.clear();
++        ++mFocusRequest;
++        mGrid.getViewTreeObserver().removeOnWindowFocusChangeListener(mWindowFocusListener);
 +        mGrid.setAdapter(null);
 +        mGrid = null;
 +        super.onDestroyView();
@@ -3149,6 +3187,15 @@ index 000000000..f6be8e270
 +            int visible = category.size();
 +            if (category == recent) {
 +                firstRecent = tiles.size();
++                // Incoming uploads can push the watched card behind Show more.
++                if (mPlaybackAnchor != null && categoryId(category) == mPlaybackAnchor.categoryId) {
++                    for (int i = mRecentLimit; i < visible; i++) {
++                        if (mPlaybackAnchor.matches((Video) category.get(i))) {
++                            mRecentLimit = (i / RECENT_PAGE_SIZE + 1) * RECENT_PAGE_SIZE;
++                            break;
++                        }
++                    }
++                }
 +                visible = Math.min(visible, mRecentLimit);
 +            }
 +            for (int index = 0; index < visible; index++) {
@@ -3159,7 +3206,11 @@ index 000000000..f6be8e270
 +            }
 +        }
 +        mAdapter.replace(tiles, updated);
-+        if (!focusFirstRecent(firstRecent)) restorePosition();
++        if (mPlaybackAnchor != null) {
++            restorePlaybackFocus();
++        } else if (!focusFirstRecent(firstRecent)) {
++            restorePosition();
++        }
 +    }
 +
 +    private boolean focusFirstRecent(int position) {
@@ -3173,6 +3224,7 @@ index 000000000..f6be8e270
 +    private void showMoreRecent(TileHolder holder) {
 +        int position = holder.getAdapterPosition();
 +        if (position == RecyclerView.NO_POSITION || !mAdapter.tiles.get(position).isShowMore()) return;
++        clearPlaybackAnchor();
 +        mRecentLimit += RECENT_PAGE_SIZE;
 +        render(null);
 +        focusTile(position, position);
@@ -3180,14 +3232,91 @@ index 000000000..f6be8e270
 +
 +    private void focusTile(int position, int scrollPosition) {
 +        RecyclerView grid = mGrid;
++        int request = ++mFocusRequest;
 +        grid.scrollToPosition(scrollPosition);
 +        OneShotPreDrawListener.add(grid, () -> {
-+            if (mGrid != grid || !isResumed()) return;
++            if (mGrid != grid || request != mFocusRequest || !isResumed()) return;
 +            if (getParentFragment() instanceof BrowseSupportFragment &&
 +                    ((BrowseSupportFragment) getParentFragment()).isShowingHeaders()) return;
 +            RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(position);
 +            if (holder != null) holder.itemView.requestFocus();
 +        });
++    }
++
++    private void rememberPlaybackTile(Tile tile) {
++        ++mFocusRequest;
++        mPlaybackAnchor = new PlaybackAnchor(categoryId(tile.category), tile.video);
++        mReturningFromPlayback = false;
++        mFocusFirstRecent = false;
++        mPendingPosition = -1;
++    }
++
++    private void clearPlaybackAnchor() {
++        if (mPlaybackAnchor == null) return;
++        ++mFocusRequest;
++        mPlaybackAnchor = null;
++        mReturningFromPlayback = false;
++        mFocusFirstRecent = false;
++        mPendingPosition = -1;
++    }
++
++    private static int categoryId(VideoGroupObjectAdapter category) {
++        return category.getAllGroups().get(0).getId();
++    }
++
++    private int findPlaybackTile(PlaybackAnchor anchor) {
++        int matchingId = RecyclerView.NO_POSITION;
++        for (int i = 0; i < mAdapter.tiles.size(); i++) {
++            Tile tile = mAdapter.tiles.get(i);
++            if (tile.video == null || categoryId(tile.category) != anchor.categoryId) continue;
++            if (tile.video == anchor.video) return i;
++            if (matchingId == RecyclerView.NO_POSITION && anchor.matches(tile.video)) matchingId = i;
++        }
++        return matchingId;
++    }
++
++    private boolean canRestorePlaybackFocus(RecyclerView grid, int request) {
++        return mGrid == grid && request == mFocusRequest && mReturningFromPlayback
++                && isResumed() && grid.hasWindowFocus()
++                && (!(getParentFragment() instanceof BrowseSupportFragment)
++                || !((BrowseSupportFragment) getParentFragment()).isShowingHeaders());
++    }
++
++    private void restorePlaybackFocus() {
++        RecyclerView grid = mGrid;
++        PlaybackAnchor anchor = mPlaybackAnchor;
++        if (grid == null || anchor == null || !mReturningFromPlayback) return;
++        int request = ++mFocusRequest;
++        grid.post(() -> {
++            if (!canRestorePlaybackFocus(grid, request)) return;
++            int position = findPlaybackTile(anchor);
++            if (position == RecyclerView.NO_POSITION) return; // Feed refresh may still be loading the original row.
++            RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(position);
++            if (holder != null && holder.itemView.hasFocus()) return;
++            grid.stopScroll();
++            grid.scrollToPosition(position);
++            OneShotPreDrawListener.add(grid, () -> {
++                if (!canRestorePlaybackFocus(grid, request)) return;
++                int current = findPlaybackTile(anchor);
++                if (current == RecyclerView.NO_POSITION) return;
++                RecyclerView.ViewHolder target = grid.findViewHolderForAdapterPosition(current);
++                if (target != null) target.itemView.requestFocus();
++            });
++        });
++    }
++
++    private static final class PlaybackAnchor {
++        final int categoryId;
++        final Video video;
++
++        PlaybackAnchor(int categoryId, Video video) {
++            this.categoryId = categoryId;
++            this.video = video;
++        }
++
++        boolean matches(Video candidate) {
++            return candidate == video || (video.videoId != null && video.videoId.equals(candidate.videoId));
++        }
 +    }
 +
 +    @Override
@@ -3223,7 +3352,7 @@ index 000000000..f6be8e270
 +    }
 +
 +    private void restorePosition() {
-+        if (mGrid == null) return;
++        if (mGrid == null || mPlaybackAnchor != null) return;
 +        int position = mPendingPosition;
 +        if (position < 0 && mSelected != null && getPosition() == -1) {
 +            for (int i = 0; i < mAdapter.tiles.size(); i++) {
@@ -3390,6 +3519,7 @@ index 000000000..f6be8e270
 +                if (focused) onFocused(tile);
 +            });
 +            holder.itemView.setOnClickListener(v -> {
++                rememberPlaybackTile(tile);
 +                if (PatRumbleCards.isRumble(tile.video)) PatRumbleCards.open(requireContext(), tile.video);
 +                else mBrowse.onVideoItemClicked(tile.video);
 +            });
