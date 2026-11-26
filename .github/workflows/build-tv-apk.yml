@@ -11,6 +11,8 @@ on:
       - 'news-mediaservice.patch'
       - 'tv-player.patch'
       - 'rumble-tv.patch'
+      - 'tv-home-badges.patch'
+      - 'tests/test_tv_home_badges.py'
       - 'pat-sync.patch'
       - 'mobile.patch'
       - 'mediaservice.patch'
@@ -32,6 +34,8 @@ on:
       - 'news-mediaservice.patch'
       - 'tv-player.patch'
       - 'rumble-tv.patch'
+      - 'tv-home-badges.patch'
+      - 'tests/test_tv_home_badges.py'
       - 'pat-sync.patch'
       - 'mobile.patch'
       - 'mediaservice.patch'
@@ -90,6 +94,8 @@ jobs:
           git -C upstream apply ../updater.patch
           git -C upstream apply --check ../rumble-tv.patch
           git -C upstream apply ../rumble-tv.patch
+          git -C upstream apply --check ../tv-home-badges.patch
+          git -C upstream apply ../tv-home-badges.patch
           chmod +x upstream/gradlew
 
       - name: Set up Java 11
@@ -152,6 +158,7 @@ jobs:
       - name: Verify playback recovery control flow
         env:
           SMARTTUBE_SOURCE_DIR: upstream
+          SMARTTUBE_TV_SOURCE_DIR: upstream
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Verify SABR attestation recovery
@@ -194,15 +201,15 @@ jobs:
           test -n "$apk_arm64"
           test -n "$apk_universal"
           if [ "$SIGNED_BUILD" = 'true' ]; then
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v19-ARMv7.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v19-ARM64.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v19-Universal.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v19-SIGNED-APKs' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v20-ARMv7.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v20-ARM64.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v20-Universal.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v20-SIGNED-APKs' >> "$GITHUB_ENV"
           else
-            cp "$apk_armv7" output/SmartTube-Pat-TV-v19-ARMv7-DEBUG-TEST-ONLY.apk
-            cp "$apk_arm64" output/SmartTube-Pat-TV-v19-ARM64-DEBUG-TEST-ONLY.apk
-            cp "$apk_universal" output/SmartTube-Pat-TV-v19-Universal-DEBUG-TEST-ONLY.apk
-            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v19-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
+            cp "$apk_armv7" output/SmartTube-Pat-TV-v20-ARMv7-DEBUG-TEST-ONLY.apk
+            cp "$apk_arm64" output/SmartTube-Pat-TV-v20-ARM64-DEBUG-TEST-ONLY.apk
+            cp "$apk_universal" output/SmartTube-Pat-TV-v20-Universal-DEBUG-TEST-ONLY.apk
+            echo 'APK_ARTIFACT_NAME=SmartTube-Pat-TV-v20-DEBUG-TEST-ONLY' >> "$GITHUB_ENV"
           fi
           file output/*.apk
 
@@ -223,21 +230,21 @@ jobs:
       - name: Download production-signed TV APK
         uses: actions/download-artifact@v4
         with:
-          name: SmartTube-Pat-TV-v19-SIGNED-APKs
+          name: SmartTube-Pat-TV-v20-SIGNED-APKs
           path: output
       - name: Verify package, version, architectures and production signature
         run: |
           tools="$(find "${ANDROID_HOME:?}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           expected_cert=98a5237751cecd7af6dc8e20761bbf67527ef4e1ee581f1125c0529d2537f2ba
           for variant in ARMv7 ARM64 Universal; do
-            apk="output/SmartTube-Pat-TV-v19-${variant}.apk"
+            apk="output/SmartTube-Pat-TV-v20-${variant}.apk"
             cert="$("$tools/apksigner" verify --print-certs "$apk")"
             printf '%s\n' "$cert"
             actual_cert="$(grep -Ei 'signer.*certificate.*sha-?256.*(digest|fingerprint)' <<< "$cert" \
               | sed -E 's/.*[[:space:]]([a-fA-F0-9:]{64,95})[[:space:]]*$/\1/' | tr -d ':' | tr '[:upper:]' '[:lower:]' | sort -u)"
             test "$actual_cert" = "$expected_cert"
             badging="$("$tools/aapt" dump badging "$apk")"
-            grep -F "package: name='app.smarttube.pattv' versionCode='3019' versionName='32.69-tv.19'" <<< "$badging"
+            grep -F "package: name='app.smarttube.pattv' versionCode='3020' versionName='32.69-tv.20'" <<< "$badging"
             case "$variant" in
               ARMv7) grep -Ex "native-code: 'armeabi-v7a'[[:space:]]*" <<< "$badging" ;;
               ARM64) grep -Ex "native-code: 'arm64-v8a'[[:space:]]*" <<< "$badging" ;;
@@ -251,15 +258,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view tv-v19 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'tv-v19 is already published; increment the TV version for the next release.'
+          if gh release view tv-v20 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'tv-v20 is already published; increment the TV version for the next release.'
           else
-            gh release create tv-v19 \
-              output/SmartTube-Pat-TV-v19-ARMv7.apk \
-              output/SmartTube-Pat-TV-v19-ARM64.apk \
-              output/SmartTube-Pat-TV-v19-Universal.apk \
+            gh release create tv-v20 \
+              output/SmartTube-Pat-TV-v20-ARMv7.apk \
+              output/SmartTube-Pat-TV-v20-ARM64.apk \
+              output/SmartTube-Pat-TV-v20-Universal.apk \
               --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title 'SmartTube Pat TV v19 - Restore watched video focus' \
-              --notes 'Returns focus to the video you opened when leaving YouTube or Rumble playback from the TV Home grid, even when recent uploads refresh or move the card. Preserves existing playback controls and settings.' \
+              --title 'SmartTube Pat TV v20 - Home-only video source logos' \
+              --notes 'Shows YouTube and Rumble source logos at the top left of video thumbnails on Home only. Keeps the separate YouTube and Rumble pages uncluttered and retains the watched-video focus fix.' \
               --latest=false
           fi
