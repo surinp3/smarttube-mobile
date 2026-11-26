@@ -232,7 +232,10 @@ jobs:
           for variant in ARMv7 ARM64 Universal; do
             apk="output/SmartTube-Pat-TV-v19-${variant}.apk"
             cert="$("$tools/apksigner" verify --print-certs "$apk")"
-            grep -Fx "Signer #1 certificate SHA-256 digest: $expected_cert" <<< "$cert"
+            printf '%s\n' "$cert"
+            actual_cert="$(grep -Ei 'signer.*certificate.*sha-?256.*(digest|fingerprint)' <<< "$cert" \
+              | sed -E 's/.*[[:space:]]([a-fA-F0-9:]{64,95})[[:space:]]*$/\1/' | tr -d ':' | tr '[:upper:]' '[:lower:]' | sort -u)"
+            test "$actual_cert" = "$expected_cert"
             badging="$("$tools/aapt" dump badging "$apk")"
             grep -F "package: name='app.smarttube.pattv' versionCode='3019' versionName='32.69-tv.19'" <<< "$badging"
             case "$variant" in
